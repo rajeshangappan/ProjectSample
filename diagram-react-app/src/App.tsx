@@ -11,7 +11,6 @@ export class NodeInfo {
     this.isExpanded = (_isExpanded === null || this.isExpanded === undefined) ? false : this.isExpanded
   }
 }
-let expand: NodeInfo;
 
 let leftMidPort: PointPortModel = {
   style: {
@@ -20,12 +19,27 @@ let leftMidPort: PointPortModel = {
   },
   shape: 'Square',
   id: 'left-mid-port',
-  visibility: PortVisibility.Visible,
+  visibility: PortVisibility.Hidden,
   offset: {
     x: 0,
     y: 0.5
   }
 };
+let rightMidPort: PointPortModel = {
+  style: {
+    strokeColor: '#366F8C',
+    fill: '#366F8C'
+  },
+  shape: 'Square',
+  id: 'right-mid-port',
+  visibility: PortVisibility.Hidden,
+  offset: {
+    x: 1,
+    y: 0.5
+  }
+};
+let leftPortNodeInfo: NodeInfo = new NodeInfo();
+leftPortNodeInfo.isLeftMidPort = true;
 let nodes: NodeModel[] = [
   {
     id: "node1",
@@ -72,11 +86,7 @@ let nodes: NodeModel[] = [
     width: 100,
     height: 25,
     annotations: [{ content: "child4" }],
-    data: () => {
-      let nodeInfo: NodeInfo = new NodeInfo();
-      nodeInfo.isLeftMidPort = true;
-      return nodeInfo;
-    }
+    data: leftPortNodeInfo
   },
   {
     id: "node5",
@@ -252,23 +262,12 @@ export default class App extends React.Component<{}, {}> {
       snapSettings={{ constraints: SnapConstraints.None }}
       nodes={nodes}
       getNodeDefaults={(node: NodeModel): NodeModel => {
-        debugger;
-        // node.expandIcon = {
-        //   shape: 'ArrowDown',
-        //   width: 10,
-        //   height: 10
+        // if (node.data !== null && node.data !== undefined) {
+        //   let nodeInfo: NodeInfo = (node.data as NodeInfo);
+        //   if (nodeInfo !== null && nodeInfo.isLeftMidPort) {
+        node.ports = [leftMidPort, rightMidPort];
         // }
-        // node.collapseIcon = {
-        //   shape: 'ArrowUp',
-        //   width: 10,
-        //   height: 10
         // }
-        if (node.data !== null && node.data !== undefined) {
-          let nodeInfo: NodeInfo = (node.data as NodeInfo);
-          if (nodeInfo !== null && nodeInfo.isLeftMidPort) {
-            node.ports = [leftMidPort];
-          }
-        }
         node.constraints = NodeConstraints.Default & ~NodeConstraints.Select;
         for (let i: number = 0; i < node.annotations.length; i++)
           node.annotations[i].constraints = AnnotationConstraints.ReadOnly;
@@ -303,6 +302,10 @@ export default class App extends React.Component<{}, {}> {
           },
         }
         connector.type = "Bezier";
+
+        connector.sourcePortID = 'right-mid-port';
+        connector.targetPortID = 'left-mid-port';
+
         return connector;
       }}
 
