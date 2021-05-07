@@ -1,2 +1,2 @@
-# ProjectSample
-Job Samples
+# Freelancing projects
+Freelancing projects
