@@ -1,14 +1,13 @@
 import * as React from "react";
 import "./App.css";
 import { ConnectorModel, DiagramComponent, NodeModel, SnapConstraints, Inject, DiagramConstraints, IDoubleClickEventArgs, Annotation, Node, Connector, NodeConstraints, AnnotationConstraints, ConnectorShape, PointPortModel, PortVisibility } from "@syncfusion/ej2-react-diagrams";
-
-
+import { Util } from "./model/util"
 let diagramInstance: DiagramComponent;
 export class NodeInfo {
   public isLeftMidPort: boolean = false;
   public isExpanded: boolean = false;
   constructor(_isExpanded?: boolean) {
-    this.isExpanded = (_isExpanded === null || this.isExpanded === undefined) ? false : this.isExpanded
+    this.isExpanded = (_isExpanded === null || this.isExpanded === undefined) ? false : this.isExpanded;
   }
 }
 
