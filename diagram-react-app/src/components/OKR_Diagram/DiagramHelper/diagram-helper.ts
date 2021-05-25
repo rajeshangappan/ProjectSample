@@ -65,14 +65,14 @@ export class DiagramHelper {
             id: "node1",
             offsetX: 5,
             offsetY: 65,
-            annotations: [{ content: "child1" }],
+            annotations: [{ content: "Increase each store weekly sales from $10k" }],
             data: new NodeInfo()
         },
         {
             id: "node2",
             offsetX: 5,
             offsetY: 95,
-            annotations: [{ content: "child2" }],
+            annotations: [{ content: "Schedule and complete quarterly OKR planning" }],
             data: new NodeInfo()
         },
         {
@@ -80,11 +80,7 @@ export class DiagramHelper {
             offsetX: 270,
             offsetY: 80,
             children: ['hidden_node_1', 'node1', 'node2'],
-            // style: {
-            //     fill: '#6BA5D7',
-            //     strokeColor: 'black'
-            // },
-            annotations: [{ offset: { x: 0.5, y: -0.1 }, content: "group1" }]
+            annotations: [{ offset: { x: 0.5, y: -0.1 }, content: "My OKRs" }]
         },
         {
             id: "hidden_node_2",
@@ -97,26 +93,22 @@ export class DiagramHelper {
             id: "node3",
             offsetX: 5,
             offsetY: 65,
-            annotations: [{ content: "child3" }],
+            annotations: [{ content: "Increase each store weekly sales from $10k" }],
             data: new NodeInfo()
         },
         {
             id: "node4",
             offsetX: 5,
             offsetY: 95,
-            annotations: [{ content: "child4" }],
+            annotations: [{ content: "Ensure 100% of employee are performing well" }],
             data: new NodeInfo()
         },
         {
             id: 'group2',
-            offsetX: 620,
+            offsetX: 750,
             offsetY: 80,
             children: ['hidden_node_2', 'node3', 'node4'],
-            // style: {
-            //     fill: '#6BA5D7',
-            //     strokeColor: 'black'
-            // },
-            annotations: [{ offset: { x: 0.5, y: -0.1 }, content: "group2" }]
+            annotations: [{ offset: { x: 0.5, y: -0.1 }, content: "My Contributors" }]
         },
         {
             id: "hidden_node_3",
@@ -129,26 +121,22 @@ export class DiagramHelper {
             id: "node5",
             offsetX: 5,
             offsetY: 65,
-            annotations: [{ content: "child5" }],
+            annotations: [{ content: "Increase each store weekly sales from $20k" }],
             data: new NodeInfo()
         },
         {
             id: "node6",
             offsetX: 5,
             offsetY: 95,
-            annotations: [{ content: "child6" }],
+            annotations: [{ content: "Ensure every manager is doing one to one meeting" }],
             data: new NodeInfo()
         },
         {
             id: 'group3',
-            offsetX: 620,
+            offsetX: 750,
             offsetY: 260,
             children: ['hidden_node_3', 'node5', 'node6'],
-            // style: {
-            //     fill: '#6BA5D7',
-            //     strokeColor: 'black'
-            // },
-            annotations: [{ offset: { x: 0.5, y: -0.1 }, content: "group3" }]
+            annotations: [{ offset: { x: 0.5, y: -0.1 }, content: "" }]
         },
         {
             id: "hidden_node_4",
@@ -161,89 +149,60 @@ export class DiagramHelper {
             id: "node7",
             offsetX: 5,
             offsetY: 65,
-            annotations: [{ content: "child7" }],
+            annotations: [{ content: "Increase each store weekly sales from $30k" }],
         },
         {
             id: "node8",
             offsetX: 5,
             offsetY: 95,
-            annotations: [{ content: "child8" }],
+            annotations: [{ content: "Ensure 100% of employee are performing well" }],
             data: new NodeInfo(),
         },
         {
             id: 'group4',
-            offsetX: 620,
-            offsetY: 435,
+            offsetX: 750,
+            offsetY: 500,
             children: ['hidden_node_4', 'node7', 'node8'],
-            // style: {
-            //     fill: '#6BA5D7',
-            //     strokeColor: 'black'
-            // },
-            annotations: [{ offset: { x: 0.5, y: -0.1 }, content: "group4" }]
+            annotations: [{ offset: { x: 0.5, y: -0.1 }, content: "" }]
         }
     ];
     public static connectors: ConnectorModel[] = [
         {
             id: "link1",
             sourceID: "node1",
-            targetID: "node3",
-            annotations: [{ content: "link1" }],
+            targetID: "node3"
         },
         {
             id: "link2",
             sourceID: "node1",
-            targetID: "node5",
-            annotations: [{ content: "link2" }],
+            targetID: "node5"
         },
         {
             id: "link3",
             sourceID: "node1",
-            targetID: "node7",
-            annotations: [{ content: "link3" }],
+            targetID: "node7"
         },
         {
             id: "link4",
             sourceID: "node2",
-            targetID: "node4",
-            annotations: [{ content: "link4" }],
+            targetID: "node4"
         },
         {
             id: "link5",
             sourceID: "node2",
-            targetID: "node6",
-            annotations: [{ content: "link5" }],
+            targetID: "node6"
         },
         {
             id: "link6",
             sourceID: "node2",
-            targetID: "node8",
-            annotations: [{ content: "link6" }],
+            targetID: "node8"
         }
-        // ,
-        // {
-        //     id: "link7",
-        //     sourceID: "node3",
-        //     targetID: "node6",
-        //     annotations: [{ content: "link7" }],
-        // },
-        // {
-        //     id: "link8",
-        //     sourceID: "node3",
-        //     targetID: "node9",
-        //     annotations: [{ content: "link8" }],
-        // },
-        // {
-        //     id: "link9",
-        //     sourceID: "node3",
-        //     targetID: "node12",
-        //     annotations: [{ content: "link9" }],
-        // }
     ];
     public static getNodeDefaults(node: NodeModel) {
         if ((node as Node).status != 'Update') {
             node.ports = [DiagramHelper.leftMidPort, DiagramHelper.rightMidPort];
             if (Util.IsNullOrUndefined(node.children)) {
-                node.width = 200;
+                node.width = 300;
                 node.height = 25;
                 node.shape = {
                     type: 'Basic',
@@ -262,30 +221,21 @@ export class DiagramHelper {
     }
     public static getConnectorDefaults(connector: ConnectorModel) {
         connector.sourceDecorator = {
-            shape: 'Circle',
-            // Defines the style for the sourceDecorator
+            shape: 'Square',
             style: {
-                // Defines the strokeWidth for the sourceDecorator
                 strokeWidth: 3,
-                // Defines the strokeColor for the sourceDecorator
-                strokeColor: 'red',
+                fill : connectorDefaultStyle.strokeColor,
+                strokeColor: connectorDefaultStyle.strokeColor,
                 opacity: .2
             }
         }
-        // Decorator shape - Diamond
         connector.targetDecorator = {
-            // Defines the custom shape for the connector's target decorator
             shape: 'Custom',
-            //Defines the  path for the connector's target decorator
             pathData: 'M80.5,12.5 C80.5,19.127417 62.59139,24.5 40.5,24.5 C18.40861,24.5 0.5,19.127417 0.5,12.5' +
                 'C0.5,5.872583 18.40861,0.5 40.5,0.5 C62.59139,0.5 80.5,5.872583 80.5,12.5 z',
-            //defines the style for the target decorator
             style: {
-                // Defines the strokeWidth for the targetDecorator
                 strokeWidth: 3,
-                // Defines the strokeColor for the sourceDecorator
                 strokeColor: 'green',
-                // Defines the opacity for the sourceDecorator
                 opacity: .2
             },
         }
