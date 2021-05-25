@@ -10,10 +10,12 @@ export class NodeInfo {
 }
 let nodeSelectedStyle: ShapeStyleModel = {
     strokeColor: "rgba(57,158,247,255)",
-    strokeWidth: 4
+    fill: "rgba(57,158,247,255)",
+    strokeWidth: 3
 }
 let nodeDefaultStyle: ShapeStyleModel = {
     strokeColor: "#C8C8C8",
+    fill: 'white',
     strokeWidth: 1
 }
 let connectorDefaultStyle: ShapeStyleModel = {
@@ -23,6 +25,12 @@ let connectorDefaultStyle: ShapeStyleModel = {
 let connectorSelectedStyle: ShapeStyleModel = {
     strokeColor: "rgba(57,158,247,255)",
     strokeWidth: 2
+}
+let srcPortDefaultStyle: ShapeStyleModel = {
+    fill: 'white'
+}
+let srcPortTextDefaultStyle: ShapeStyleModel = {
+    fill: 'white'
 }
 export class DiagramHelper {
     public static diagramInstance: DiagramComponent;
@@ -248,26 +256,43 @@ export class DiagramHelper {
             let targetNode: NodeModel = this.GetNode(link.targetID);
             let newlinkPrefix: string = link.sourceID + "_" + link.targetID + "_linkHelper"
             let srcHelperNode: NodeModel = {
-                id: newlinkPrefix + "_node1",
+                id: newlinkPrefix + "_srcNode",
                 width: 50,
                 height: 15,
                 style: {
                     strokeColor: nodeDefaultStyle.strokeColor,
                     fill: nodeDefaultStyle.strokeColor,
-                    strokeWidth: 0
+                    strokeWidth: 1
                 },
+                annotations: [{
+                    content: '$30k',
+                    style: {
+                        color: 'white',
+                        opacity: 0.5
+                    }
+                }],
                 offsetX: srcNode.offsetX + srcNode.width / 2 + 25,
                 offsetY: srcNode.offsetY
             }
             let targetHelperNode: NodeModel = {
-                id: newlinkPrefix + "_node2",
+                id: newlinkPrefix + "_targetNode",
                 width: 50,
                 height: 15,
+                shape: {
+                    type: 'Path',
+                    data: 'M 0 5 L 5 0 L 20 0 L 20 10 L 5 10 z'
+                },
                 style: {
                     strokeColor: nodeDefaultStyle.strokeColor,
-                    fill: nodeDefaultStyle.strokeColor,
-                    strokeWidth: 0
+                    fill: 'white',
+                    strokeWidth: 1
                 },
+                annotations: [{
+                    content: '$16k',
+                    style: {
+                        color: nodeDefaultStyle.strokeColor
+                    }
+                }],
                 offsetX: targetNode.offsetX - targetNode.width / 2 - 25,
                 offsetY: targetNode.offsetY
             }
@@ -324,22 +349,43 @@ export class DiagramHelper {
     }
     private static AddSelection(nodeModel: NodeModel) {
         if (this.IsDecoratorHelper(nodeModel.id)) {
-            nodeModel.style.fill = nodeSelectedStyle.strokeColor;
-            nodeModel.style.strokeWidth = 0;
+            let textColor: string = 'white';
+            if (nodeModel.id.indexOf("_srcNode") >= 0) {
+                nodeModel.style.fill = nodeSelectedStyle.strokeColor;
+            } else {
+                textColor = nodeSelectedStyle.strokeColor;
+            }
+            if (!Util.IsNullOrUndefined(nodeModel.annotations) && nodeModel.annotations.length > 0) {
+                nodeModel.annotations[0].style.color = textColor;
+                nodeModel.annotations[0].style.opacity = 1;
+            }
+            nodeModel.style.strokeColor = nodeSelectedStyle.strokeColor;
         }
         else {
             nodeModel.style.strokeWidth = nodeSelectedStyle.strokeWidth;
             nodeModel.style.strokeColor = nodeSelectedStyle.strokeColor;
+            nodeModel.style.fill = nodeSelectedStyle.fill;
         }
     }
     private static ClearSelection(nodeModel: NodeModel) {
         if (this.IsDecoratorHelper(nodeModel.id)) {
-            nodeModel.style.fill = nodeDefaultStyle.strokeColor;
-            nodeModel.style.strokeWidth = 0;
+            let textColor: string = 'white';
+            if (nodeModel.id.indexOf("_srcNode") >= 0) {
+                nodeModel.style.fill = nodeDefaultStyle.strokeColor;
+            }
+            else {
+                textColor = nodeDefaultStyle.strokeColor;
+            }
+            if (!Util.IsNullOrUndefined(nodeModel.annotations) && nodeModel.annotations.length > 0) {
+                nodeModel.annotations[0].style.color = textColor;
+                nodeModel.annotations[0].style.opacity = 0.5;
+            }
+            nodeModel.style.strokeColor = nodeDefaultStyle.strokeColor;
         }
         else {
             nodeModel.style.strokeWidth = nodeDefaultStyle.strokeWidth;
             nodeModel.style.strokeColor = nodeDefaultStyle.strokeColor;
+            nodeModel.style.fill = nodeDefaultStyle.fill;
         }
     }
     private static SelectOutEdges(nodeId: string) {
