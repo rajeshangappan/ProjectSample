@@ -1,4 +1,4 @@
-import { ConnectorModel, DiagramComponent, IClickEventArgs, NodeModel, PointPortModel, PortVisibility, Node, NodeConstraints, AnnotationConstraints, ShapeStyle, ShapeStyleModel } from "@syncfusion/ej2-react-diagrams";
+import { ConnectorModel, DiagramComponent, IClickEventArgs, NodeModel, PointPortModel, PortVisibility, Node, NodeConstraints, AnnotationConstraints, ShapeStyle, ShapeStyleModel, ConnectorConstraints } from "@syncfusion/ej2-react-diagrams";
 import { Util } from "../../../model/util";
 
 export class NodeInfo {
@@ -245,6 +245,11 @@ export class DiagramHelper {
             if (Util.IsNullOrUndefined(node.children)) {
                 node.width = 200;
                 node.height = 25;
+                node.shape = {
+                    type: 'Basic',
+                    shape: 'Rectangle',
+                    cornerRadius: 5
+                }
             }
             // else {
             node.constraints = NodeConstraints.Default & ~NodeConstraints.Select;
@@ -288,6 +293,7 @@ export class DiagramHelper {
         connector.style = connectorDefaultStyle;
         connector.sourcePortID = 'right-mid-port';
         connector.targetPortID = 'left-mid-port';
+        connector.constraints = ConnectorConstraints.Default & ~ConnectorConstraints.Select;
         return connector;
     }
     public static onCreated() {
@@ -305,36 +311,44 @@ export class DiagramHelper {
             }
         }
     }
-    public static GetNode(nodeId: string): NodeModel {
+    private static GetNode(nodeId: string): NodeModel {
         let nodeModel: NodeModel = this.diagramInstance.nodes.find(({ id }) => id === nodeId);
         return nodeModel;
     }
-    public static GetConnector(connectorId: string): ConnectorModel {
+    private static GetConnector(connectorId: string): ConnectorModel {
         let connModel: ConnectorModel = this.diagramInstance.connectors.find(({ id }) => id === connectorId);
         return connModel;
     }
-    public static SelectConnectedNodes(node: Node) {
+    private static SelectConnectedNodes(node: Node) {
         if (Util.IsNullOrUndefined(node.children)) {
             this.ResetNodesStye();
             this.ResetConnectorStye();
-            this.SelectNode(node.id);
+            if (Util.IsNullOrUndefined(node.inEdges) || node.inEdges.length == 0) {
+                this.SelectNode(node.id);
+            }
         }
     }
-    public static SelectNode(nodeId: string) {
-        let nodeModel: NodeModel = this.GetNode(nodeId);
+    private static SelectNode(nodeId: string) {
+        this.SelectOutEdges(nodeId);
+    }
+    private static AddSelection(nodeModel: NodeModel) {
         nodeModel.style.strokeColor = nodeSelectedStyle.strokeColor;
         nodeModel.style.strokeWidth = nodeSelectedStyle.strokeWidth;
+    }
+    private static SelectOutEdges(nodeId: string) {
+        let nodeModel: NodeModel = this.GetNode(nodeId);
         let node: Node = nodeModel as Node;
+        this.AddSelection(nodeModel);
         if (!Util.IsNullOrUndefined(node.outEdges) && node.outEdges.length > 0) {
             for (let i: number = 0; i < node.outEdges.length; i++) {
                 let edge: ConnectorModel = this.GetConnector(node.outEdges[i]);
                 edge.style.strokeColor = connectorSelectedStyle.strokeColor;
                 edge.style.strokeWidth = connectorSelectedStyle.strokeWidth;
-                this.SelectNode(edge.targetID);
+                this.SelectOutEdges(edge.targetID);
             }
         }
     }
-    public static ResetNodesStye() {
+    private static ResetNodesStye() {
         let nodes: NodeModel[] = this.diagramInstance.nodes;
         for (let i: number = 0; i < nodes.length; i++) {
             if (Util.IsNullOrUndefined(nodes[i].children)) {
@@ -342,13 +356,13 @@ export class DiagramHelper {
             }
         }
     }
-    public static ResetConnectorStye() {
+    private static ResetConnectorStye() {
         let conns: ConnectorModel[] = this.diagramInstance.connectors;
         for (let i: number = 0; i < conns.length; i++) {
             conns[i].style = connectorDefaultStyle;
         }
     }
-    public static ExpandCollapseNode(node: Node) {
+    private static ExpandCollapseNode(node: Node) {
         let expandInfo: NodeInfo = node.data as NodeInfo;
         let isExpand: boolean = !expandInfo.isExpanded;
         let connectorIds: string[] = node.outEdges;
