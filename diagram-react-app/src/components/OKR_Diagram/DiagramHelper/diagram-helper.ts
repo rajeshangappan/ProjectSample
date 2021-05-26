@@ -10,7 +10,7 @@ export class NodeInfo {
 }
 let nodeSelectedStyle: ShapeStyleModel = {
     strokeColor: "rgba(57,158,247,255)",
-    fill: "rgba(57,158,247,255)",
+    fill: "white",
     strokeWidth: 3
 }
 let nodeDefaultStyle: ShapeStyleModel = {
@@ -26,12 +26,12 @@ let connectorSelectedStyle: ShapeStyleModel = {
     strokeColor: "rgba(57,158,247,255)",
     strokeWidth: 2
 }
-let srcPortDefaultStyle: ShapeStyleModel = {
-    fill: 'white'
-}
-let srcPortTextDefaultStyle: ShapeStyleModel = {
-    fill: 'white'
-}
+// let srcPortDefaultStyle: ShapeStyleModel = {
+//     fill: 'white'
+// }
+// let srcPortTextDefaultStyle: ShapeStyleModel = {
+//     fill: 'white'
+// }
 export class DiagramHelper {
     public static diagramInstance: DiagramComponent;
 
