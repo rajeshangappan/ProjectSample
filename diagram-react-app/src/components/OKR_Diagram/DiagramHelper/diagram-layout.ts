@@ -1,8 +1,10 @@
 import { ConnectorModel, DiagramComponent, NodeModel, Node as DNode } from "@syncfusion/ej2-react-diagrams";
+import { Util } from "../../../model/util";
 
 export class CustomDiagramLayout {
     diagramIns: DiagramComponent;
-    constructor(diagramInstance) {
+    public layoutNodes: NodeModel[];
+    constructor(diagramInstance: DiagramComponent) {
         this.SetDiagramInstance(diagramInstance);
     }
     SetDiagramInstance(diagramInstance: DiagramComponent) {
@@ -15,6 +17,12 @@ export class CustomDiagramLayout {
         this.SetDiagramInstance(diagramInstance);
         this.MoveToTop();
     }
+    private GetLayoutNodes(): NodeModel[] {
+        if (Util.IsNullOrUndefined(this.layoutNodes)) {
+            this.layoutNodes = this.diagramIns.nodes.filter((item, index, array) => !item.excludeFromLayout);
+        }
+        return this.layoutNodes;
+    }
     private MoveToTop() {
         let levelOffsetX: number[] = this.GetAllLevelsXValues();
         for (let i: number = 0; i < levelOffsetX.length; i++) {
@@ -24,7 +32,7 @@ export class CustomDiagramLayout {
             nodes.forEach((item, index, array) => {
                 let lowYChildNode: NodeModel = this.GetLowestYNode(item["outEdges"]);
                 if (lowYChildNode !== null && lowYChildNode !== undefined) {
-                    if (index == 0 && this.IsSibling(item, prevNode)) {
+                    if (index === 0 && this.IsSibling(item, prevNode)) {
                         item.offsetY = lowYChildNode.offsetY;
                     }
                     else {
@@ -56,12 +64,12 @@ export class CustomDiagramLayout {
         return node;
     }
     private GetAllLevelsXValues(): number[] {
-        let allOffsetX: number[] = this.diagramIns.nodes.map(x => x.offsetX);
+        let allOffsetX: number[] = this.GetLayoutNodes().map(x => x.offsetX);
         let uniqueX: number[] = allOffsetX.filter((item, index) => { return allOffsetX.indexOf(item) === index; });
         return uniqueX.sort(function (n1, n2) { return n2 - n1 }); //descending order
     }
     private GetSameLevelNodes(offsetX: number): NodeModel[] {
-        return this.diagramIns.nodes.filter((item, index, array) => item.offsetX === offsetX).sort(function (n1, n2) { return n1.offsetY - n2.offsetY });
+        return this.GetLayoutNodes().filter((item, index, array) => item.offsetX === offsetX).sort(function (n1, n2) { return n1.offsetY - n2.offsetY });
     }
     private IsSibling(node1: NodeModel, node2: NodeModel): boolean {
         let inEdges1: string[] = (node1 as DNode).inEdges;
