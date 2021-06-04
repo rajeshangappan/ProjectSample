@@ -19,9 +19,16 @@ export class CustomDiagramLayout {
     }
     private GetLayoutNodes(): NodeModel[] {
         if (Util.IsNullOrUndefined(this.layoutNodes)) {
-            this.layoutNodes = this.diagramIns.nodes.filter((item, index, array) => !item.excludeFromLayout);
+            this.layoutNodes = this.diagramIns.nodes.filter((item, index, array) => {
+                let node: DNode = item as DNode;
+                return !item.excludeFromLayout
+            }
+            );
         }
         return this.layoutNodes;
+    }
+    private IsConsiderNode(node: DNode): boolean {
+        return (node.parentId !== "" || (node.outEdges != null && node.outEdges.length > 0))
     }
     private MoveToTop() {
         let levelOffsetX: number[] = this.GetAllLevelsXValues();
@@ -32,7 +39,7 @@ export class CustomDiagramLayout {
             nodes.forEach((item, index, array) => {
                 let lowYChildNode: NodeModel = this.GetLowestYNode(item["outEdges"]);
                 if (lowYChildNode !== null && lowYChildNode !== undefined) {
-                    if (index === 0 && this.IsSibling(item, prevNode)) {
+                    if (index === 0) {
                         item.offsetY = lowYChildNode.offsetY;
                     }
                     else {
@@ -64,12 +71,15 @@ export class CustomDiagramLayout {
         return node;
     }
     private GetAllLevelsXValues(): number[] {
-        let allOffsetX: number[] = this.GetLayoutNodes().map(x => x.offsetX);
+        let allOffsetX: number[] = this.diagramIns.nodes.map(x => x.offsetX);
         let uniqueX: number[] = allOffsetX.filter((item, index) => { return allOffsetX.indexOf(item) === index; });
         return uniqueX.sort(function (n1, n2) { return n2 - n1 }); //descending order
     }
     private GetSameLevelNodes(offsetX: number): NodeModel[] {
-        return this.GetLayoutNodes().filter((item, index, array) => item.offsetX === offsetX).sort(function (n1, n2) { return n1.offsetY - n2.offsetY });
+        return this.GetLayoutNodes().filter((item, index, array) => {
+            let node: DNode = item as DNode;
+            return item.offsetX === offsetX
+        }).sort(function (n1, n2) { return n1.offsetY - n2.offsetY });
     }
     private IsSibling(node1: NodeModel, node2: NodeModel): boolean {
         let inEdges1: string[] = (node1 as DNode).inEdges;

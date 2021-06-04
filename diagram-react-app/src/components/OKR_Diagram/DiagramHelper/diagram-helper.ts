@@ -16,14 +16,14 @@ export class DiagramHelper {
     }
     public OnDiagramCreated(diagramInstance: DiagramComponent) {
         this.SetDiagramInstance(diagramInstance);
-        this.PrepareKeyResultChilds();   
+        //this.PrepareKeyResultChilds();   
         this.layout.DockToTop(diagramInstance);     
         this.diagramIns.nodes.forEach((item, index, array) => {
             item.visible = true;
         });
-        // this.diagramIns.connectors.forEach((item, index, array) => {
-        //     item.visible = true;
-        // });
+        this.diagramIns.connectors.forEach((item, index, array) => {
+            item.visible = true;
+        });
         //this.diagramIns.fitToPage();
     }
     private PrepareKeyResultChilds() {
