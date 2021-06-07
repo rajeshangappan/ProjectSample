@@ -1,0 +1,723 @@
+ .../DiagramHelper/diagram-helper-util.jsx          |   8 +
+ .../RelaxedMap/DiagramHelper/diagram-helper.jsx    | 235 ++++++++++++++++
+ .../RelaxedMap/DiagramHelper/diagram-layout.jsx    |  85 ++++++
+ src/components/AlignmentMap/RelaxedMap/index.jsx   | 303 ++++++++-------------
+ 4 files changed, 448 insertions(+), 183 deletions(-)
+
+diff --git a/src/components/AlignmentMap/RelaxedMap/DiagramHelper/diagram-helper-util.jsx b/src/components/AlignmentMap/RelaxedMap/DiagramHelper/diagram-helper-util.jsx
+new file mode 100644
+index 00000000..f082a844
+--- /dev/null
++++ b/src/components/AlignmentMap/RelaxedMap/DiagramHelper/diagram-helper-util.jsx
+@@ -0,0 +1,8 @@
++export class DiagramHelperUtil {
++    constructor() {
++
++    }
++    static isNullOrUndefined(val) {
++        return val === null || val === undefined;
++    }
++}
+\ No newline at end of file
+diff --git a/src/components/AlignmentMap/RelaxedMap/DiagramHelper/diagram-helper.jsx b/src/components/AlignmentMap/RelaxedMap/DiagramHelper/diagram-helper.jsx
+new file mode 100644
+index 00000000..0f7f3051
+--- /dev/null
++++ b/src/components/AlignmentMap/RelaxedMap/DiagramHelper/diagram-helper.jsx
+@@ -0,0 +1,235 @@
++import { DiagramHelperUtil as Util } from "./diagram-helper-util";
++//let Util;
++let nodeSelectedStyle = {
++    strokeColor: "rgba(57,158,247,255)",
++    fill: "white",
++    strokeWidth: 3
++}
++let nodeDefaultStyle = {
++    strokeColor: "#C8C8C8",
++    fill: 'white',
++    strokeWidth: 1
++}
++let connectorDefaultStyle = {
++    strokeColor: "#C8C8C8",
++    strokeWidth: 1
++}
++let connectorSelectedStyle = {
++    strokeColor: "rgba(57,158,247,255)",
++    strokeWidth: 2
++}
++export class DiagramHelper {
++    static diagramIns;
++    static jsonData;
++    static allKrNodes = [];
++    static allKrLink = [];
++    constructor() {
++        //Util = new DiagramHelperUtil();
++    }
++    static SetDiagramIns(diagramIns) {
++        this.diagramIns = diagramIns;
++    }
++    static SetData(jsonData) {
++        this.jsonData = jsonData;//diagramIns.dataSourceSettings.dataSource.dataSource.json;
++    }
++    static UpdateChildOkrs(jsonData) {
++        this.SetData(jsonData);
++        for (let i = 0; i < this.jsonData.length; i++) {
++            let data = this.jsonData[i];
++            if (data?.okrViewKeyResults && data.okrViewKeyResults?.length > 0) {
++                for (let j = 0; j < data.okrViewKeyResults.length; j++) {
++                    let result = data.okrViewKeyResults[j];
++                    if (result.parentId) {
++                        let parentOkr = this.GetOkrResultDataById(result.parentId);
++                        if (parentOkr) {
++                            if (!parentOkr.childOkrs) {
++                                parentOkr.childOkrs = [];
++                            }
++                            parentOkr.childOkrs.push(result.krId);
++                        }
++                    }
++                    if (!result.krClassNames) {
++                        result.krClassNames = "";
++                    }
++                }
++            }
++        }
++    }
++    static GetOkrResultDataById(krId) {
++        let jsonData = this.jsonData;
++        let okrResult;
++        let okr
++        for (let i = 0; i < jsonData.length; i++) {
++            okr = jsonData[i];
++            okrResult = this.GetOkrResultObject(krId, okr);
++            if (okrResult) {
++                return okrResult;
++            }
++        }
++        return null;
++    }
++    static GetOkrResultObject(krId, okr) {
++        if (okr?.okrViewKeyResults && okr.okrViewKeyResults?.length > 0) {
++            for (let j = 0; j < okr.okrViewKeyResults.length; j++) {
++                if (okr.okrViewKeyResults[j].krId === krId) {
++                    return okr.okrViewKeyResults[j];
++                }
++            }
++        }
++    }
++
++    static IsDecoratorHelper(Id) {
++        return Id.indexOf("_link_helper") >= 0;
++    }
++    static GetBoundsFromElement(elementId) {
++        let element = document.getElementById(elementId);
++        let bounds = element.getBoundingClientRect();
++        let diaramBounds = this.diagramIns.element.getBoundingClientRect();
++        let scrollTop = document.getElementById("diagram-okr-relaxmapcontent").scrollTop;
++        scrollTop = 580 - scrollTop;
++        return {
++            offsetX: bounds.left - diaramBounds.left,
++            offsetY: (bounds.top - diaramBounds.top) - scrollTop,
++            height: bounds.height,
++            width: bounds.width
++        }
++    }
++    static GetOrCreateHelperNode(krId, type) {
++        let nodeId = type === "source" ? krId + "_srcNode_link_helper" : krId + "_targetNode_link_helper";
++        let helperNode = this.diagramIns.getNodeObject(nodeId);
++        if (!helperNode || !helperNode.id) {
++            helperNode = {
++                id: nodeId,
++                width: 50,
++                height: 15,
++                style: {
++                    strokeColor: nodeSelectedStyle.strokeColor,
++                    fill: nodeSelectedStyle.strokeColor,
++                    strokeWidth: 1
++                },
++                annotations: [{
++                    content: '$30k',
++                    style: {
++                        color: 'white',
++                        opacity: 1
++                    }
++                }],
++                pivot: { x: 0, y: 0 }
++            }
++            let bounds = this.GetBoundsFromElement("kr_" + krId);
++            helperNode.offsetY = bounds.offsetY + helperNode.height / 2;
++            if (type === "target") {
++                helperNode.shape = {
++                    type: 'Path',
++                    data: 'M 0 5 L 5 0 L 20 0 L 20 10 L 5 10 z'
++                };
++                helperNode.style = {
++                    strokeColor: nodeSelectedStyle.strokeColor,
++                    fill: 'white',
++                    strokeWidth: 1
++                }
++                helperNode.annotations = [{
++                    content: '$16k',
++                    style: {
++                        color: nodeSelectedStyle.strokeColor
++                    }
++                }];
++                helperNode.offsetX = bounds.offsetX - helperNode.width;
++            } else {
++                helperNode.offsetX = bounds.offsetX + bounds.width;
++            }
++            this.diagramIns.add(helperNode);
++            this.allKrNodes.push(helperNode);
++        }
++        helperNode.visible = true;
++        return helperNode;
++    }
++    static SelectKrResult(krData, okrData, relaxJsonData) {
++        this.RemoveAllSelection();
++        let element = document.getElementById("kr_" + krData.krId);
++        element.classList.add("selected");
++        if (krData && krData.childOkrs) {
++            this.AddClass(krData.childOkrs, "selected");
++            DiagramHelper.CreateConnections(krData, okrData, relaxJsonData);
++        }
++    }
++    static RemoveAllSelection() {
++        this.RemoveClass(".kr-item", "selected");
++        for (let i = 0; i < this.allKrNodes.length; i++) {
++            this.diagramIns.remove(this.allKrNodes[i]);
++            //this.GetNode(this.allKrNodes[i].id).visible = false;
++        }
++        for (let i = 0; i < this.allKrLink.length; i++) {
++            this.diagramIns.remove(this.allKrLink[i]);
++            //this.GetConnector(this.allKrLink[i].id).visible = false;
++        }
++    }
++    static GetNode(nodeId) {
++        let nodeModel = this.diagramIns.nodes.find(({ id }) => id === nodeId);
++        return nodeModel;
++    }
++    static GetConnector(connectorId) {
++        let connModel = this.diagramIns.connectors.find(({ id }) => id === connectorId);
++        return connModel;
++    }
++    static RemoveClass(selector, className) {
++        document.querySelectorAll(selector).forEach((element) => {
++            element.classList.remove(className);
++        });
++    }
++    static AddClass(krChilds, className) {
++        krChilds.forEach((childId) => {
++            let element = document.getElementById("kr_" + childId);
++            element.classList.add(className);
++        });
++    }
++    static CreateConnections(krData, okrData, jsonData) {
++        debugger;
++        let srcKrId = krData.krId;
++        let targetElementIds = krData.childOkrs;
++        let selArray = [];
++        let srcHelperNode = this.GetOrCreateHelperNode(srcKrId, "source");
++        srcHelperNode.annotations = [{
++            content: '$30k',
++            style: {
++                color: 'white',
++                opacity: 1
++            }
++        }];
++        selArray.push(srcHelperNode);
++        for (let i = 0; i < targetElementIds.length; i++) {
++            let targetHelperNode = this.GetOrCreateHelperNode(targetElementIds[i], "target");
++            targetHelperNode.annotations = [{
++                content: '$16k',
++                style: {
++                    color: nodeDefaultStyle.strokeColor
++                }
++            }];
++            selArray.push(targetHelperNode);
++            let linkId = srcHelperNode.id + "_" + targetHelperNode.id + "_link_helper";
++            let link = this.diagramIns.getConnectorObject(linkId);
++            if (!link || !link.id) {
++                link = {
++                    sourceID: srcHelperNode.id,
++                    targetID: targetHelperNode.id,
++                    id: srcHelperNode.id + "_" + targetHelperNode.id + "_link_helper",
++                    sourceDecorator: { shape: 'None' },
++                    targetDecorator: { shape: 'None' },
++                    type: 'Bezier',
++                }
++                link.style = {
++                    strokeColor: connectorSelectedStyle.strokeColor,
++                    strokeWidth: connectorSelectedStyle.strokeWidth
++                }
++                this.diagramIns.add(link);
++                this.allKrLink.push(link);
++            }
++            link.visible = true;
++            
++        }
++        //setTimeout(() => {
++        this.diagramIns.select(selArray);
++        this.diagramIns.bringToFront();
++        //}, 2000);
++    }
++}
+\ No newline at end of file
+diff --git a/src/components/AlignmentMap/RelaxedMap/DiagramHelper/diagram-layout.jsx b/src/components/AlignmentMap/RelaxedMap/DiagramHelper/diagram-layout.jsx
+new file mode 100644
+index 00000000..3775a8e4
+--- /dev/null
++++ b/src/components/AlignmentMap/RelaxedMap/DiagramHelper/diagram-layout.jsx
+@@ -0,0 +1,85 @@
++import { DiagramHelperUtil as Util} from './diagram-helper-util';
++let diagramIns;
++let layoutNodes;
++export class CustomDiagramLayout {
++    constructor(diagramInstance) {       
++        this.SetDiagramInstance(diagramInstance);
++    }
++    SetDiagramInstance(diagramInstance) {
++        diagramIns = diagramInstance;
++    }
++    DockToTop(diagramInstance) {
++        this.SetDiagramInstance(diagramInstance);
++        this.MoveToTop();
++    }
++    GetLayoutNodes() {
++        if (Util.isNullOrUndefined(layoutNodes)) {
++            layoutNodes = diagramIns.nodes.filter((item, index, array) => !item.excludeFromLayout);
++        }
++        return layoutNodes;
++    }
++    MoveToTop() {
++        let levelOffsetX = this.GetAllLevelsXValues();
++        for (let i = 0; i < levelOffsetX.length; i++) {
++            let nodes = this.GetSameLevelNodes(levelOffsetX[i]);
++            let prevY = 0;
++            let prevNode = null;
++            let i = 0;
++            nodes.forEach((item, index, array) => {
++                i = index;
++                let lowYChildNode = this.GetLowestYNode(item["outEdges"]);
++                if (lowYChildNode !== null && lowYChildNode !== undefined) {
++                    if (i === 0) {//&& this.IsSibling(item, prevNode)
++                        item.offsetY = lowYChildNode.offsetY;
++                    }
++                    else {
++                        if (prevY < lowYChildNode.offsetY) {
++                            item.offsetY = lowYChildNode.offsetY;
++                        } else {
++                            item.offsetY = prevY;
++                        }
++                    }
++                    prevY = item.offsetY + item.height + diagramIns.layout.verticalSpacing;
++                    prevNode = item;
++                }
++                item.visible = true;
++            });
++        }
++    }
++    GetLowestYNode(outEdges) {
++        let node;
++        if (!Util.isNullOrUndefined(outEdges) && outEdges.length > 0) {
++            let cnode;
++            for (let i = 0; i < outEdges.length; i++) {
++                let edge = diagramIns.getConnectorObject(outEdges[i]);
++                cnode = diagramIns.getNodeObject(edge.targetID);
++                if (node === null || node === undefined || cnode.offsetY < node.offsetY) {
++                    node = cnode;
++                }
++            }
++        }
++        return node;
++    }
++    GetAllLevelsXValues() {
++        let allOffsetX = this.GetLayoutNodes().map(x => x.offsetX);
++        let uniqueX = allOffsetX.filter((item, index) => { return allOffsetX.indexOf(item) === index; });
++        return uniqueX.sort(function (n1, n2) { return n2 - n1 }); //descending order
++    }
++    GetSameLevelNodes(offsetX) {
++        return this.GetLayoutNodes().filter((item, index, array) => item.offsetX === offsetX).sort(function (n1, n2) { return n1.offsetY - n2.offsetY });
++    }
++    IsSibling(node1, node2) {
++        let inEdges1 = (node1).inEdges;
++        let inEdges2 = (node1).inEdges;
++        if (!Util.isNullOrUndefined(inEdges1) && !Util.isNullOrUndefined(inEdges2)) {
++            for (let i = 0; i < inEdges1.length; i++) {
++                for (let j = 0; j < inEdges2.length; j++) {
++                    if (inEdges1[i] == inEdges2[j]) {
++                        return true;
++                    }
++                }
++            }
++        }
++        return false;
++    }
++}
+\ No newline at end of file
+diff --git a/src/components/AlignmentMap/RelaxedMap/index.jsx b/src/components/AlignmentMap/RelaxedMap/index.jsx
+index 0f522770..4fbba1d0 100644
+--- a/src/components/AlignmentMap/RelaxedMap/index.jsx
++++ b/src/components/AlignmentMap/RelaxedMap/index.jsx
+@@ -17,11 +17,14 @@ import { DataManager } from '@syncfusion/ej2-data';
+ import { MenuComponent } from '@syncfusion/ej2-react-navigations';
+ import { ToolbarComponent } from '@syncfusion/ej2-react-navigations';
+ import { getLocalStorageItem } from '../../../services/StorageService';
+-import ObjectiveCard from '../AlignmentListing/ObjectiveCard';
+-import StandaloneCard from '../AlignmentListing/StandaloneCard';
++import { CustomDiagramLayout } from './DiagramHelper/diagram-layout';
++import { DiagramHelper } from './DiagramHelper/diagram-helper';
++import { DiagramOkrHelper } from './DiagramHelper/diagram-okr-helper';
+ 
+ let diagramInstance;
+-let template;
++let diagramLayoutHelper;
++let diagramBox;
++let diagramOkrHelper;
+ export default class RelaxedMap extends SampleBase {
+ 	constructor(props) {
+ 		super(props);
+@@ -31,7 +34,8 @@ export default class RelaxedMap extends SampleBase {
+ 			mapData: alignResult,
+ 			loggedInUser: userDetail,
+ 		};
+-		template = this.diagramTemplate;
++		diagramLayoutHelper = new CustomDiagramLayout();
++		diagramOkrHelper = new DiagramOkrHelper();
+ 	}
+ 
+ 	onItemClick(args) {
+@@ -56,63 +60,6 @@ export default class RelaxedMap extends SampleBase {
+ 		}
+ 	}
+ 
+-	diagramTemplate = (data) => {
+-		let cardobject = document.querySelectorAll('.foreign-object .foreign-object');
+-		if (cardobject.length > 0) {
+-			cardobject.forEach(function (value, index) {
+-				value.style.zIndex = cardobject.length - index;
+-			});
+-		}
+-		if (data.data && data.data.objectiveType === 2) {
+-			return (
+-				<StandaloneCard
+-					{...this.props}
+-					data={data}
+-					userDetail={this.props.userDetail}
+-					handleDeleteOkr={this.props.handleDeleteOkr}
+-					setOpenDrawer={this.props.setOpenDrawer}
+-					setModalProps={this.props.setModalProps}
+-					updateProgress={this.props.updateProgress}
+-					showEditLoader={this.props.showEditLoader}
+-				/>
+-			);
+-		}
+-		return (
+-			<ObjectiveCard
+-				{...this.props}
+-				data={data}
+-				userDetail={this.props.userDetail}
+-				handleDeleteOkr={this.props.handleDeleteOkr}
+-				setModalProps={this.props.setModalProps}
+-				updateProgress={this.props.updateProgress}
+-				showEditLoader={this.props.showEditLoader}
+-				showAddGoalForm={this.props.showAddGoalForm}
+-				showAddGoal={this.props.showAddGoal}
+-				durationCycleDetail={this.props.durationCycleDetail}
+-				currentCycleEndDate={this.props.currentCycleEndDate}
+-				currentCycleId={this.props.currentCycleId}
+-				year={this.props.year}
+-				t={this.props.t}
+-				fetchOkr={this.props.fetchOkr}
+-				setGoalDetail={this.props.setGoalDetail}
+-				setIsGoalCreated={this.props.setIsGoalCreated}
+-				saveAndEditObjectiveAndKr={this.props.saveAndEditObjectiveAndKr}
+-				setFormSubmit={this.props.setFormSubmit}
+-				formSubmit={this.props.formSubmit}
+-				isGoalCreated={this.props.isGoalCreated}
+-				keyDetailObject={this.props.keyDetailObject}
+-				goalDetailObject={this.props.goalDetailObject}
+-				// showApiMsgs={showApiMsgs}
+-				// isTabChanged={isTabChanged}
+-				// setIsTabChanged={setIsTabChanged}
+-				// addObjectiveCallback={addObjectiveCallback}
+-			/>
+-		);
+-	};
+-	// rendereComplete() {
+-	// 	// diagramInstance.reset();
+-	// 	// diagramInstance.fitToPage();
+-	// }
+ 	RenameCard = (data) => {
+ 		alert(data.data.TextToShow);
+ 	};
+@@ -142,151 +89,141 @@ export default class RelaxedMap extends SampleBase {
+ 	}
+ 
+ 	render() {
+-		const { alignResult } = this.props;
+-		//const { t } = useTranslation();
+-		let alignmentData = [];
+-		if (alignResult.length <= 0) {
+-			return (
+-				<Box className='welcome-content'>
+-					<Box textAlign='center'>
+-						<Typography>Loading...</Typography>
+-						{/* <AnimatedIcon className='' width='519' type='image/svg+xml' alt='WelcomeImage' imagePath={AlignmentImage} />
++		if (!diagramBox) {
++			const { alignResult } = this.props;
++			let alignmentData = [];
++			if (alignResult.length <= 0) {
++				return (
++					<Box className='welcome-content'>
++						<Box textAlign='center'>
++							<Typography>Loading...</Typography>
++							{/* <AnimatedIcon className='' width='519' type='image/svg+xml' alt='WelcomeImage' imagePath={AlignmentImage} />
+ 						<Typography variant='h2'>Setting Objectives is the first step towards success</Typography>
+ 						<Typography>Start aligning to Organizational Objectives</Typography> */}
++						</Box>
+ 					</Box>
+-				</Box>
+-			);
+-		} else {
+-			alignmentData =
+-				alignResult &&
+-				alignResult.length > 0 &&
+-				alignResult.map((item, i) => {
++				);
++			} else {
++				alignmentData = alignResult;
++				alignmentData.forEach((item, i) => {
+ 					//item.index = i + 1;
+ 					if (item.parent.length === 0) {
+ 						item.parent = '';
+ 					}
+ 					return item;
+ 				});
+-		}
++				DiagramHelper.UpdateChildOkrs(alignmentData);
++			}
+ 
+-		return (
+-			<Box className='diagram-control-pane'>
+-				<MenuComponent items={this.menuItems} />
+-				<Box className='control-panel'>
++			diagramBox = (
++				<Box className='diagram-control-pane'>
++					<MenuComponent items={this.menuItems} />
++					<Box className='control-panel'>
++						<Box className='control-section'>
++							<Box className='content-wrapper'>
++								<ToolbarComponent
++									id='toolbar_diagram'
++									clicked={this.onItemClick}
++									items={[
++										{
++											type: 'Button',
++											//tooltipText: 'ZoomIn',
++											text: 'Zoom In',
++											//prefixIcon: 'e-diagram-icons e-diagram-zoomin',
++										},
++										{
++											type: 'Button',
++											//tooltipText: 'ZoomOut',
++											text: 'Zoom Out',
++											//prefixIcon: 'e-diagram-icons e-diagram-zoomout',
++										},
++										{
++											type: 'Button',
++											//tooltipText: 'Reset',
++											text: 'Reset',
++											//prefixIcon: 'e-diagram-icons e-diagram-reset',
++										},
++										{
++											type: 'Button',
++											//tooltipText: 'Reset',
++											text: 'ToggleExpand',
++											//prefixIcon: 'e-diagram-icons e-diagram-reset',
++										},
++									]}
++								/>
++							</Box>
++						</Box>
++					</Box>
+ 					<Box className='control-section'>
+ 						<Box className='content-wrapper'>
+-							<ToolbarComponent
+-								id='toolbar_diagram'
+-								clicked={this.onItemClick}
+-								items={[
+-									{
+-										type: 'Button',
+-										//tooltipText: 'ZoomIn',
+-										text: 'Zoom In',
+-										//prefixIcon: 'e-diagram-icons e-diagram-zoomin',
+-									},
+-									{
+-										type: 'Button',
+-										//tooltipText: 'ZoomOut',
+-										text: 'Zoom Out',
+-										//prefixIcon: 'e-diagram-icons e-diagram-zoomout',
+-									},
+-									{
+-										type: 'Button',
+-										//tooltipText: 'Reset',
+-										text: 'Reset',
+-										//prefixIcon: 'e-diagram-icons e-diagram-reset',
+-									},
+-									{
+-										type: 'Button',
+-										//tooltipText: 'Reset',
+-										text: 'ToggleExpand',
+-										//prefixIcon: 'e-diagram-icons e-diagram-reset',
++							<DiagramComponent
++								id='diagram'
++								ref={(diagram) => (diagramInstance = diagram)}
++								width={'100%'}
++								height={'1500px'}
++								snapSettings={{ constraints: SnapConstraints.None }}
++								dataSourceSettings={{
++									id: 'objectiveUniqueId',
++									parentId: 'parent',
++									dataSource: new DataManager(alignmentData),
++									doBinding: (nodeModel, data, diagram) => {
++
++									}
++								}}
++								//tool={DiagramTools.ZoomPan}
++								layout={{
++									connectionPointOrigin: ConnectionPointOrigin.SamePoint,
++									enableAnimation: true,
++									type: 'ComplexHierarchicalTree',
++									orientation: 'LeftToRight',
++									horizontalSpacing: 200,
++									verticalSpacing: 130,
++									arrangement: ChildArrangement.Linear,
++									getLayoutInfo: (node, options) => {
++										/* tslint:disable:no-string-literal */
++										if (node.data['TextToShow'] === 'General Manager') {
++											options.assistants.push(options.children[0]);
++											options.children.splice(0, 1);
++										}
++										if (!options.hasSubTree) {
++											options.type = 'Right';
++										}
+ 									},
+-								]}
+-							/>
+-						</Box>
+-					</Box>
+-				</Box>
+-				<Box className='control-section'>
+-					<Box className='content-wrapper'>
+-						<DiagramComponent
+-							id='diagram'
+-							ref={(diagram) => (diagramInstance = diagram)}
+-							width={'100%'}
+-							height={'1500px'}
+-							snapSettings={{ constraints: SnapConstraints.None }}
+-							nodeTemplate={template}
+-							// backgroundColor='#6BA5D7'
+-							//configures data source settings
+-							dataSourceSettings={{
+-								id: 'objectiveUniqueId',
+-								parentId: 'parent',
+-								//dataSource: new DataManager(localBindData),
+-								dataSource: new DataManager(alignmentData),
+-								doBinding: (nodeModel, data, diagram) => {
+-									nodeModel.nodeTemplate = template.bind(data);
+-									nodeModel.template = template;
+-									nodeModel.style = { boder: '1px solid #000000' };
+-									nodeModel.shape = {
+-										type: 'HTML',
+-									};
+-								},
+-							}}
+-							//Disables all interactions except zoom/pan
+-							tool={DiagramTools.ZoomPan}
+-							//Configures automatic layout
+-							layout={{
+-								// connectionPointOrigin: ConnectionPointOrigin.DifferentPoint,
+-								connectionPointOrigin: ConnectionPointOrigin.SamePoint,
+-								enableAnimation: true,
+-								type: 'ComplexHierarchicalTree',
+-								// type: 'HierarchicalTree',
+-								orientation: 'LeftToRight',
+-								// orientation: 'TopToBottom',
+-								horizontalSpacing: 200,
+-								verticalSpacing: 130,
+-								arrangement: ChildArrangement.Linear,
+-								// arrangement: ChildArrangement.NonLinear,
+-								getLayoutInfo: (node, options) => {
++								}}
++								//Defines the default node and connector properties
++								getNodeDefaults={(obj, diagram) => {
+ 									/* tslint:disable:no-string-literal */
+-									if (node.data['TextToShow'] === 'General Manager') {
+-										options.assistants.push(options.children[0]);
+-										options.children.splice(0, 1);
+-									}
+-									if (!options.hasSubTree) {
+-										options.type = 'Right';
+-									}
+-								},
+-							}}
+-							//Defines the default node and connector properties
+-							getNodeDefaults={(obj, diagram) => {
+-								/* tslint:disable:no-string-literal */
+-								return nodeDefaults(obj, diagram);
+-							}}
+-							getConnectorDefaults={(connector, diagram) => {
+-								return connectorDefaults(connector, diagram);
+-							}}
+-							/* created={() => {
+-								return expandAll(true);
+-							}} */
+-						>
+-							<Inject services={[DataBinding, LayoutAnimation, ComplexHierarchicalTree, LineDistribution]} />
+-						</DiagramComponent>
++									if (obj.id.indexOf("_child1_1") < 0)
++										return nodeDefaults(obj, diagram);
++								}}
++								getConnectorDefaults={(connector, diagram) => {
++									return connectorDefaults(connector, diagram);
++								}}
++								created={() => {
++									diagramOkrHelper.CreateOkrNodes(diagramInstance);
++									//diagramLayoutHelper.DockToTop(diagramInstance);
++									// return expandAll(true);
++								}}
++							>
++								<Inject services={[DataBinding, LayoutAnimation, ComplexHierarchicalTree, LineDistribution]} />
++							</DiagramComponent>
++						</Box>
+ 					</Box>
++					{/* <button onClick={() => expandAll()}>Expand All</button> */}
+ 				</Box>
+-				{/* <button onClick={() => expandAll()}>Expand All</button> */}
+-			</Box>
+-		);
++			);
++		}
++		return diagramBox;
+ 	}
+ }
+ 
+ //sets default value for Node.
+ function nodeDefaults(obj, diagram) {
+ 	//obj.backgroundColor = obj.data.color;
++	obj.pivot = { x: 0, y: 0 };
+ 	obj.style = {
+ 		fill: 'none',
+-		strokeColor: 'none',
++		strokeColor: 'black',
+ 		color: 'white',
+ 		borderCorner: '30',
+ 	};
+@@ -312,7 +249,7 @@ function nodeDefaults(obj, diagram) {
+ 	obj.collapseIcon.borderColor = '#39a3fa';
+ 	obj.width = 500;
+ 	obj.height = 180;
+-	obj.offsetX = window.innerWidth / 2;
++	obj.offsetX = -window.innerWidth / 2;
+ 	// obj.offsetY = obj.data.index * 300;
+ 	// if (obj.data && obj.data.objectiveType === 1) {
+ 	// 	obj.offsetY = obj.data.index * 120;
