@@ -1,0 +1,1835 @@
+ .../DiagramHelper/diagram-helper-util.jsx          |   8 +
+ .../RelaxedMap/DiagramHelper/diagram-helper.jsx    | 234 +++++++
+ .../RelaxedMap/DiagramHelper/diagram-layout.jsx    |  91 +++
+ .../DiagramHelper/diagram-okr-helper.jsx           | 132 ++++
+ .../DiagramHelper/diagram-template-helper.tsx      | 764 +++++++++++++++++++++
+ src/components/AlignmentMap/RelaxedMap/index.jsx   | 330 ++++-----
+ src/components/AlignmentMap/style.scss             | 130 ++--
+ 7 files changed, 1434 insertions(+), 255 deletions(-)
+
+diff --git a/src/components/AlignmentMap/RelaxedMap/DiagramHelper/diagram-helper-util.jsx b/src/components/AlignmentMap/RelaxedMap/DiagramHelper/diagram-helper-util.jsx
+new file mode 100644
+index 00000000..0fea94ce
+--- /dev/null
++++ b/src/components/AlignmentMap/RelaxedMap/DiagramHelper/diagram-helper-util.jsx
+@@ -0,0 +1,8 @@
++export class DiagramHelperUtil {
++    constructor() {
++
++    }
++    static isNullOrUndefined(val) {
++        return val === null || val === undefined;
++    }
++}
+diff --git a/src/components/AlignmentMap/RelaxedMap/DiagramHelper/diagram-helper.jsx b/src/components/AlignmentMap/RelaxedMap/DiagramHelper/diagram-helper.jsx
+new file mode 100644
+index 00000000..773806d2
+--- /dev/null
++++ b/src/components/AlignmentMap/RelaxedMap/DiagramHelper/diagram-helper.jsx
+@@ -0,0 +1,234 @@
++import { DiagramHelperUtil as Util } from "./diagram-helper-util";
++//let Util;
++let nodeSelectedStyle = {
++    strokeColor: "rgba(57,158,247,255)",
++    fill: "white",
++    strokeWidth: 3
++}
++let nodeDefaultStyle = {
++    strokeColor: "#C8C8C8",
++    fill: 'white',
++    strokeWidth: 1
++}
++let connectorDefaultStyle = {
++    strokeColor: "#C8C8C8",
++    strokeWidth: 1
++}
++let connectorSelectedStyle = {
++    strokeColor: "rgba(57,158,247,255)",
++    strokeWidth: 2
++}
++export class DiagramHelper {
++    static diagramIns;
++    static jsonData;
++    static allKrNodes = [];
++    static allKrLink = [];
++    constructor() {
++        //Util = new DiagramHelperUtil();
++    }
++    static SetDiagramIns(diagramIns) {
++        this.diagramIns = diagramIns;
++    }
++    static SetData(jsonData) {
++        this.jsonData = jsonData;//diagramIns.dataSourceSettings.dataSource.dataSource.json;
++    }
++    static UpdateChildOkrs(jsonData) {
++        this.SetData(jsonData);
++        for (let i = 0; i < this.jsonData.length; i++) {
++            let data = this.jsonData[i];
++            if (data?.okrViewKeyResults && data.okrViewKeyResults?.length > 0) {
++                for (let j = 0; j < data.okrViewKeyResults.length; j++) {
++                    let result = data.okrViewKeyResults[j];
++                    if (result.parentId) {
++                        let parentOkr = this.GetOkrResultDataById(result.parentId);
++                        if (parentOkr) {
++                            if (!parentOkr.childOkrs) {
++                                parentOkr.childOkrs = [];
++                            }
++                            parentOkr.childOkrs.push(result.krId);
++                        }
++                    }
++                    if (!result.krClassNames) {
++                        result.krClassNames = "";
++                    }
++                }
++            }
++        }
++    }
++    static GetOkrResultDataById(krId) {
++        let jsonData = this.jsonData;
++        let okrResult;
++        let okr
++        for (let i = 0; i < jsonData.length; i++) {
++            okr = jsonData[i];
++            okrResult = this.GetOkrResultObject(krId, okr);
++            if (okrResult) {
++                return okrResult;
++            }
++        }
++        return null;
++    }
++    static GetOkrResultObject(krId, okr) {
++        if (okr?.okrViewKeyResults && okr.okrViewKeyResults?.length > 0) {
++            for (let j = 0; j < okr.okrViewKeyResults.length; j++) {
++                if (okr.okrViewKeyResults[j].krId === krId) {
++                    return okr.okrViewKeyResults[j];
++                }
++            }
++        }
++    }
++
++    static IsDecoratorHelper(Id) {
++        return Id.indexOf("_link_helper") >= 0;
++    }
++    static GetBoundsFromElement(elementId) {
++        let element = document.getElementById(elementId);
++        let bounds = element.getBoundingClientRect();
++        let diaramBounds = this.diagramIns.element.getBoundingClientRect();
++        let scrollTop = document.getElementById("diagram-okr-relaxmapcontent").scrollTop;
++        scrollTop = 580 - scrollTop;
++        return {
++            offsetX: bounds.left - diaramBounds.left,
++            offsetY: (bounds.top - diaramBounds.top) - scrollTop,
++            height: bounds.height,
++            width: bounds.width
++        }
++    }
++    static GetOrCreateHelperNode(krId, type) {
++        let nodeId = type === "source" ? krId + "_srcNode_link_helper" : krId + "_targetNode_link_helper";
++        let helperNode = this.diagramIns.getNodeObject(nodeId);
++        if (!helperNode || !helperNode.id) {
++            helperNode = {
++                id: nodeId,
++                width: 50,
++                height: 15,
++                style: {
++                    strokeColor: nodeSelectedStyle.strokeColor,
++                    fill: nodeSelectedStyle.strokeColor,
++                    strokeWidth: 1
++                },
++                annotations: [{
++                    content: '$30k',
++                    style: {
++                        color: 'white',
++                        opacity: 1
++                    }
++                }],
++                pivot: { x: 0, y: 0 }
++            }
++            let bounds = this.GetBoundsFromElement("kr_" + krId);
++            helperNode.offsetY = bounds.offsetY + helperNode.height / 2;
++            if (type === "target") {
++                helperNode.shape = {
++                    type: 'Path',
++                    data: 'M 0 5 L 5 0 L 20 0 L 20 10 L 5 10 z'
++                };
++                helperNode.style = {
++                    strokeColor: nodeSelectedStyle.strokeColor,
++                    fill: 'white',
++                    strokeWidth: 1
++                }
++                helperNode.annotations = [{
++                    content: '$16k',
++                    style: {
++                        color: nodeSelectedStyle.strokeColor
++                    }
++                }];
++                helperNode.offsetX = bounds.offsetX - helperNode.width;
++            } else {
++                helperNode.offsetX = bounds.offsetX + bounds.width;
++            }
++            this.diagramIns.add(helperNode);
++            this.allKrNodes.push(helperNode);
++        }
++        helperNode.visible = true;
++        return helperNode;
++    }
++    static SelectKrResult(krData, okrData, relaxJsonData) {
++        this.RemoveAllSelection();
++        let element = document.getElementById("kr_" + krData.krId);
++        element.classList.add("selected");
++        if (krData && krData.childOkrs) {
++            this.AddClass(krData.childOkrs, "selected");
++            DiagramHelper.CreateConnections(krData, okrData, relaxJsonData);
++        }
++    }
++    static RemoveAllSelection() {
++        this.RemoveClass(".kr-item", "selected");
++        for (let i = 0; i < this.allKrNodes.length; i++) {
++            this.diagramIns.remove(this.allKrNodes[i]);
++            //this.GetNode(this.allKrNodes[i].id).visible = false;
++        }
++        for (let i = 0; i < this.allKrLink.length; i++) {
++            this.diagramIns.remove(this.allKrLink[i]);
++            //this.GetConnector(this.allKrLink[i].id).visible = false;
++        }
++    }
++    static GetNode(nodeId) {
++        let nodeModel = this.diagramIns.nodes.find(({ id }) => id === nodeId);
++        return nodeModel;
++    }
++    static GetConnector(connectorId) {
++        let connModel = this.diagramIns.connectors.find(({ id }) => id === connectorId);
++        return connModel;
++    }
++    static RemoveClass(selector, className) {
++        document.querySelectorAll(selector).forEach((element) => {
++            element.classList.remove(className);
++        });
++    }
++    static AddClass(krChilds, className) {
++        krChilds.forEach((childId) => {
++            let element = document.getElementById("kr_" + childId);
++            element.classList.add(className);
++        });
++    }
++    static CreateConnections(krData, okrData, jsonData) {
++        let srcKrId = krData.krId;
++        let targetElementIds = krData.childOkrs;
++        let selArray = [];
++        let srcHelperNode = this.GetOrCreateHelperNode(srcKrId, "source");
++        srcHelperNode.annotations = [{
++            content: '$30k',
++            style: {
++                color: 'white',
++                opacity: 1
++            }
++        }];
++        selArray.push(srcHelperNode);
++        for (let i = 0; i < targetElementIds.length; i++) {
++            let targetHelperNode = this.GetOrCreateHelperNode(targetElementIds[i], "target");
++            targetHelperNode.annotations = [{
++                content: '$16k',
++                style: {
++                    color: nodeDefaultStyle.strokeColor
++                }
++            }];
++            selArray.push(targetHelperNode);
++            let linkId = srcHelperNode.id + "_" + targetHelperNode.id + "_link_helper";
++            let link = this.diagramIns.getConnectorObject(linkId);
++            if (!link || !link.id) {
++                link = {
++                    sourceID: srcHelperNode.id,
++                    targetID: targetHelperNode.id,
++                    id: srcHelperNode.id + "_" + targetHelperNode.id + "_link_helper",
++                    sourceDecorator: { shape: 'None' },
++                    targetDecorator: { shape: 'None' },
++                    type: 'Bezier',
++                }
++                link.style = {
++                    strokeColor: connectorSelectedStyle.strokeColor,
++                    strokeWidth: connectorSelectedStyle.strokeWidth
++                }
++                this.diagramIns.add(link);
++                this.allKrLink.push(link);
++            }
++            link.visible = true;
++            
++        }
++        //setTimeout(() => {
++        this.diagramIns.select(selArray);
++        this.diagramIns.bringToFront();
++        //}, 2000);
++    }
++}
+diff --git a/src/components/AlignmentMap/RelaxedMap/DiagramHelper/diagram-layout.jsx b/src/components/AlignmentMap/RelaxedMap/DiagramHelper/diagram-layout.jsx
+new file mode 100644
+index 00000000..bb12217b
+--- /dev/null
++++ b/src/components/AlignmentMap/RelaxedMap/DiagramHelper/diagram-layout.jsx
+@@ -0,0 +1,91 @@
++import { DiagramHelperUtil as Util } from './diagram-helper-util';
++let diagramIns;
++let layoutNodes;
++let diagramOkrHelper;
++export class CustomDiagramLayout {
++    constructor(diagramInstance) {
++        this.SetDiagramInstance(diagramInstance);
++    }
++    SetDiagramInstance(diagramInstance, diagramOkrHelperIns) {
++        diagramIns = diagramInstance;
++        diagramOkrHelper = diagramOkrHelperIns
++    }
++    DockToTop(diagramInstance, diagramOkrHelperIns) {
++        this.SetDiagramInstance(diagramInstance, diagramOkrHelperIns);
++        this.MoveToTop();
++    }
++    GetLayoutNodes() {
++        if (Util.isNullOrUndefined(layoutNodes)) {
++            layoutNodes = diagramIns.nodes.filter((item, index, array) => !item.excludeFromLayout);
++        }
++        return layoutNodes;
++    }
++    MoveToTop() {
++        let levelOffsetX = this.GetAllLevelsXValues();
++        for (let i = 0; i < levelOffsetX.length; i++) {
++            let nodes = this.GetSameLevelNodes(levelOffsetX[i]);
++            let prevY = 0;
++            let prevNode = null;
++            let i = 0;
++            nodes.forEach((item, index, array) => {
++                i = index;
++                let lowYChildNode = this.GetLowestYNode(item["outEdges"]);
++                if (lowYChildNode !== null && lowYChildNode !== undefined) {
++                    if (i === 0) {//&& this.IsSibling(item, prevNode)
++                        item.offsetY = lowYChildNode.offsetY;
++                        diagramOkrHelper.UpdateChildOffsets(item);
++                    }
++                    else {
++                        if (prevY < lowYChildNode.offsetY) {
++                            item.offsetY = lowYChildNode.offsetY;
++                            diagramOkrHelper.UpdateChildOffsets(item);
++                        } else {
++                            item.offsetY = prevY;
++                            diagramOkrHelper.UpdateChildOffsets(item);
++                        }
++                    }
++                    prevY = item.offsetY + 200 + diagramIns.layout.verticalSpacing;
++                    //200 is min node height 
++                    prevNode = item;
++                }
++                item.visible = true;
++            });
++        }
++    }
++    GetLowestYNode(outEdges) {
++        let node;
++        if (!Util.isNullOrUndefined(outEdges) && outEdges.length > 0) {
++            let cnode;
++            for (let i = 0; i < outEdges.length; i++) {
++                let edge = diagramIns.getConnectorObject(outEdges[i]);
++                cnode = diagramIns.getNodeObject(edge.targetID);
++                if (node === null || node === undefined || cnode.offsetY < node.offsetY) {
++                    node = cnode;
++                }
++            }
++        }
++        return node;
++    }
++    GetAllLevelsXValues() {
++        let allOffsetX = this.GetLayoutNodes().map(x => x.offsetX);
++        let uniqueX = allOffsetX.filter((item, index) => { return allOffsetX.indexOf(item) === index; });
++        return uniqueX.sort(function (n1, n2) { return n2 - n1 }); //descending order
++    }
++    GetSameLevelNodes(offsetX) {
++        return this.GetLayoutNodes().filter((item, index, array) => item.offsetX === offsetX).sort(function (n1, n2) { return n1.offsetY - n2.offsetY });
++    }
++    IsSibling(node1, node2) {
++        let inEdges1 = (node1).inEdges;
++        let inEdges2 = (node1).inEdges;
++        if (!Util.isNullOrUndefined(inEdges1) && !Util.isNullOrUndefined(inEdges2)) {
++            for (let i = 0; i < inEdges1.length; i++) {
++                for (let j = 0; j < inEdges2.length; j++) {
++                    if (inEdges1[i] == inEdges2[j]) {
++                        return true;
++                    }
++                }
++            }
++        }
++        return false;
++    }
++}
+diff --git a/src/components/AlignmentMap/RelaxedMap/DiagramHelper/diagram-okr-helper.jsx b/src/components/AlignmentMap/RelaxedMap/DiagramHelper/diagram-okr-helper.jsx
+new file mode 100644
+index 00000000..84690357
+--- /dev/null
++++ b/src/components/AlignmentMap/RelaxedMap/DiagramHelper/diagram-okr-helper.jsx
+@@ -0,0 +1,132 @@
++import { DiagramTemplateHelper } from './diagram-template-helper';
++export class DiagramOkrHelper {
++    diagramIns;
++    diagramTemplateHelper;
++    canvas;
++    firstRowHeight = 200;
++    krHeight = 28;
++    margin = { left: 10, top: 10, right: 10, bottom: 10 };
++    krSpace = 5;
++    construtor(diagramTemplateHelper) {
++        this.diagramTemplateHelper = diagramTemplateHelper;
++    }
++    SetHelpers(diagramInstance, diagramTemplateHelper) {
++        this.diagramIns = diagramInstance;
++        this.diagramTemplateHelper = diagramTemplateHelper;
++    }
++    GetOkrHeight(node) {
++        let height = this.firstRowHeight;
++        if (node.data && node.data.okrViewKeyResults && node.data.okrViewKeyResults.length > 0) {
++            let resCount = node.data.okrViewKeyResults.length
++            height += (resCount * this.krHeight) + (resCount - 1) * this.krSpace;
++        }
++        height += this.margin.bottom;
++        return height;
++    }
++    CreateOkrNodes(diagramInstance, diagramTemplateHelper) {
++        this.SetHelpers(diagramInstance, diagramTemplateHelper);
++        let ins = this;
++        let nodes = this.diagramIns.nodes;
++        let len = nodes.length;
++        for (let i = 0; i < len; i++) {
++            ins.CreateOkrNode(nodes[i], nodes[i].data, diagramInstance);
++        }
++
++    }
++    CreateOkrNode(node, data) {
++        this.CreateFirstRow(node, data);
++        this.CreateKrResultItems(node, data);
++        this.UpdateChildOffsets(node);
++    }
++    CreateFirstRow(node, okrData) {
++        let margin = this.margin;
++        let okrFirstRow = {
++            id: node.id + '_okrFirstRow',
++            name: "titleText",
++            height: node.height - margin.bottom,
++            width: node.width - margin.right,
++            data: okrData,
++            template: this.diagramTemplateHelper.getTemplate,
++            shape: {
++                type: 'HTML',
++            },
++            pivot: { x: 0, y: 0 },
++            excludeFromLayout: true
++        };
++        this.diagramIns.add(okrFirstRow);
++
++        node.children = [
++            okrFirstRow.id
++        ];
++    }
++    CreateKrResultItems(node, okrData) {
++        let margin = this.margin;
++        if (okrData.okrViewKeyResults && okrData.okrViewKeyResults.length > 0) {
++            for (let i = 0; i < okrData.okrViewKeyResults.length; i++) {
++                let okrKrItemRow = {
++                    id: node.id + '_okrKrItem' + (i + 1),
++                    height: 28,
++                    width: node.width - margin.left - margin.right,
++                    data: { okr: okrData, kr: okrData.okrViewKeyResults[i] },
++                    template: this.diagramTemplateHelper.getTemplate,
++                    shape: {
++                        type: 'HTML',
++                    },
++                    pivot: { x: 0, y: 0 },
++                    excludeFromLayout: true
++                };
++                this.diagramIns.add(okrKrItemRow);
++                node.children.push(okrKrItemRow.id);
++            }
++        }
++    }
++    UpdateChildOffsets(node) {
++        let margin = this.margin;
++        let okrFirstRow = this.diagramIns.nodes.find(n => n.id === node.id + '_okrFirstRow');
++        let okrData = node.data;
++        if (okrFirstRow) {
++            okrFirstRow.offsetX = node.offsetX + margin.left;
++            okrFirstRow.offsetY = node.offsetY + margin.top;
++        }
++        if (okrData && okrData.okrViewKeyResults && okrData.okrViewKeyResults.length > 0) {
++            let startX = node.offsetX + margin.left;
++            let startY = okrFirstRow.offsetY + 190;
++            for (let i = 0; i < okrData.okrViewKeyResults.length; i++) {
++                let okrKrItemRow = this.diagramIns.nodes.find(n => n.id === node.id + '_okrKrItem' + (i + 1))
++                if (okrKrItemRow) {
++                    okrKrItemRow.offsetX = startX;
++                    okrKrItemRow.offsetY = startY;
++                    startY += okrKrItemRow.height + this.krSpace;
++                }
++            }
++        }
++
++    }
++    getIconPathData(iconName) {
++        let iconPathData = "";
++        switch (iconName.toLowerCase()) {
++            case "kebab":
++                iconPathData = "M15.2727 25.875C15.2727 25.7244 15.1506 25.6023 15 25.6023C14.8494 25.6023 14.7273 25.7244 14.7273 25.875C14.7273 26.0256 14.8494 26.1477 15 26.1477C15.1506 26.1477 15.2727 26.0256 15.2727 25.875ZM15 28.6023C13.4937 28.6023 12.2727 27.3813 12.2727 25.875C12.2727 24.3688 13.4937 23.1477 15 23.1477C16.5062 23.1477 17.7273 24.3688 17.7273 25.875C17.7273 27.3813 16.5062 28.6023 15 28.6023ZM15.2727 15.1023C15.2727 14.9517 15.1506 14.8296 15 14.8296C14.8494 14.8296 14.7273 14.9517 14.7273 15.1023C14.7273 15.2529 14.8494 15.375 15 15.375C15.1506 15.375 15.2727 15.2529 15.2727 15.1023ZM15 17.8296C13.4937 17.8296 12.2727 16.6085 12.2727 15.1023C12.2727 13.5961 13.4937 12.375 15 12.375C16.5062 12.375 17.7273 13.5961 17.7273 15.1023C17.7273 16.6085 16.5062 17.8296 15 17.8296ZM15.2727 4.32957C15.2727 4.17895 15.1506 4.05684 15 4.05684C14.8494 4.05684 14.7273 4.17895 14.7273 4.32957C14.7273 4.48019 14.8494 4.60229 15 4.60229C15.1506 4.60229 15.2727 4.48019 15.2727 4.32957ZM15 7.05684C13.4937 7.05684 12.2727 5.83579 12.2727 4.32957C12.2727 2.82333 13.4938 1.60229 15 1.60229C16.5062 1.60229 17.7273 2.82333 17.7273 4.32957C17.7273 5.83579 16.5062 7.05684 15 7.05684Z";
++                break;
++            case "private":
++                iconPathData = "M10.5 8.69037H10.0765C9.75188 8.06738 9.10029 7.64075 8.35052 7.64075H7.67386C7.19679 7.64075 6.76097 7.86108 6.47813 8.24532C6.40376 8.34633 6.34376 8.45422 6.29768 8.56646C6.20822 8.5208 6.10716 8.49481 6.00002 8.49481C5.89287 8.49481 5.79173 8.52073 5.70227 8.56641C5.6562 8.45419 5.5962 8.34633 5.52185 8.24534C5.23903 7.86113 4.80321 7.64077 4.32612 7.64077H3.64945C2.89969 7.64077 2.2481 8.0674 1.92347 8.69039H1.5C1.37058 8.69039 1.26562 8.79532 1.26562 8.92477C1.26562 9.05419 1.37058 9.15914 1.5 9.15914H1.75193C1.72102 9.29663 1.70414 9.43939 1.70414 9.58608C1.70414 10.6587 2.57679 11.5314 3.64945 11.5314C4.53652 11.5314 5.30958 10.9623 5.57313 10.1153L5.74385 9.5667C5.78752 9.42643 5.80988 9.28367 5.81189 9.14204C5.81723 9.04278 5.89943 8.96358 6.00002 8.96358C6.09827 8.96358 6.17913 9.03912 6.18783 9.13515C6.18921 9.27903 6.21173 9.42415 6.2561 9.56672L6.42682 10.1153C6.69037 10.9623 7.46344 11.5314 8.3505 11.5314C9.42316 11.5314 10.2958 10.6587 10.2958 9.58608C10.2958 9.43939 10.279 9.29663 10.248 9.15914H10.5C10.6294 9.15914 10.7344 9.05419 10.7344 8.92477C10.7344 8.79532 10.6294 8.69037 10.5 8.69037Z M9.60762 3.08801C9.3873 2.50724 9.11178 1.9024 8.78595 1.47851C8.59283 1.22726 8.28036 1.06709 7.92866 1.03907C7.57926 1.01105 7.23996 1.11828 6.99783 1.33277C6.74217 1.55925 6.48448 1.67405 6.23193 1.67405C5.97938 1.67405 5.7217 1.55923 5.46606 1.33277C5.22393 1.11826 4.8845 1.01099 4.53523 1.03907C4.18353 1.06707 3.87106 1.22726 3.67794 1.47851C3.35215 1.90235 3.07663 2.50722 2.85629 3.08804C2.85594 3.08812 2.85558 3.08815 2.85523 3.08823C1.48601 3.39597 0.731934 3.86448 0.731934 4.40749C0.731934 4.83991 1.20764 5.22562 2.1076 5.5229C2.91672 5.79018 4.03425 5.97178 5.25431 6.03431C5.25871 6.03453 5.26305 6.03463 5.26739 6.03463C5.38014 6.03463 5.47478 5.95959 5.48166 5.86226C5.48875 5.76115 5.39851 5.67429 5.28007 5.66822C4.10311 5.60793 3.03154 5.43485 2.2627 5.1809C1.56295 4.94974 1.16162 4.66785 1.16162 4.40749C1.16162 4.09019 1.74619 3.75218 2.70504 3.50546C2.6463 3.67484 2.5927 3.83747 2.54455 3.98737C2.51542 4.0781 2.57147 4.17296 2.67429 4.20688C3.49431 4.47742 4.77716 4.79991 6.23193 4.79991C7.68673 4.79991 8.96958 4.47742 9.78957 4.20688C9.8924 4.17296 9.94847 4.0781 9.91932 3.98737C9.87117 3.83749 9.81759 3.67484 9.75885 3.50546C10.7178 3.75218 11.3022 4.09008 11.3022 4.40749C11.3022 4.66772 10.9012 4.94952 10.202 5.18061C9.43377 5.43452 7.26318 5.76981 5.28007 5.66822C5.1616 5.67431 5.07139 5.76119 5.07852 5.86228C5.08538 5.95963 5.18002 6.03463 5.29277 6.03463C3.57516 6.03477 5.30149 6.03451 5.30587 6.03429C8.70693 6.03429 9.54865 5.78981 10.3572 5.52259C11.2565 5.22535 11.7319 4.83976 11.7319 4.40749C11.7319 3.86428 10.9775 3.39575 9.60762 3.08801ZM6.23193 4.43316C4.94631 4.43316 3.79803 4.16819 3.01108 3.92312C3.18429 3.39328 3.56695 2.29144 4.0372 1.67966C4.15824 1.52219 4.35433 1.42179 4.57517 1.40419C4.79364 1.38675 5.00567 1.45348 5.15662 1.58723C5.4916 1.88396 5.86346 2.04079 6.23193 2.04079C6.60041 2.04079 6.97226 1.88394 7.30725 1.58723C7.45822 1.4535 7.67012 1.38672 7.8887 1.40419C8.10954 1.42178 8.30563 1.52219 8.42667 1.67966C8.89701 2.29155 9.2796 3.3933 9.45279 3.92312C8.66586 4.16819 7.5176 4.43316 6.23193 4.43316Z";
++                break;
++            case "keyresult":
++                iconPathData = "M6.71854 6.18852L4.52411 3.9941C4.35506 3.82488 4.08076 3.82488 3.91168 3.9941C3.74249 4.16315 3.74249 4.43745 3.91168 4.60652L6.10611 6.80094C6.19072 6.88555 6.30144 6.92784 6.41233 6.92784C6.52321 6.92784 6.63393 6.88555 6.71854 6.80094C6.88773 6.63187 6.88773 6.35757 6.71854 6.18852Z M9.30956 5.10748L8.50042 4.2982C8.33967 4.13758 8.07932 4.13758 7.91856 4.2982C7.75779 4.45895 7.75779 4.71958 7.91856 4.8802L8.72769 5.68948C9.58252 6.54444 9.5817 7.94559 8.72769 8.81111C7.873 9.6658 6.47184 9.66512 5.60605 8.81111L4.79676 8.00198C4.63614 7.84123 4.37552 7.84123 4.21475 8.00198C4.05398 8.16275 4.05398 8.42321 4.21475 8.58385L5.02595 9.39504C5.61947 9.9806 6.39611 10.2736 7.1711 10.2736C7.94773 10.2736 8.72301 9.97936 9.31158 9.39106C10.4841 8.20251 10.4833 6.28108 9.30956 5.10748Z M6.41524 2.2132L5.60405 1.40185C4.41579 0.229494 2.49423 0.230447 1.31857 1.40583C0.146083 2.59424 0.147035 4.51566 1.32063 5.68925L2.12992 6.49854C2.21017 6.57892 2.3155 6.6191 2.42085 6.6191C2.52605 6.6191 2.6314 6.57892 2.71178 6.4984C2.87253 6.33779 2.87253 6.07717 2.71178 5.91654L1.9025 5.10725C1.04768 4.25243 1.04849 2.85128 1.9025 1.98576C2.75745 1.13107 4.1586 1.13191 5.02413 1.98576L5.83341 2.79504C5.99418 2.95581 6.25451 2.95581 6.41528 2.79504C6.57601 2.63443 6.57601 2.37381 6.41524 2.2132Z";
++            case "individual":
++                iconPathData = "M4.95032 1.63878C4.793 1.79201 4.65658 2.08218 4.65658 2.6749C4.65658 3.26736 4.79295 3.56749 4.95469 3.72829C5.11717 3.88982 5.42088 4.02583 6.01778 4.02583C6.61432 4.02583 6.93235 3.8899 7.10596 3.72222C7.27535 3.55862 7.41676 3.25847 7.41676 2.6749C7.41676 2.09121 7.27539 1.80092 7.11039 1.64479C6.93846 1.48209 6.62029 1.3499 6.01778 1.3499C5.41478 1.3499 5.11102 1.48225 4.95032 1.63878ZM4.11302 0.779164C4.59592 0.308812 5.27275 0.149902 6.01778 0.149902C6.76331 0.149902 7.44463 0.308973 7.93518 0.773161C8.43266 1.24391 8.61676 1.91612 8.61676 2.6749C8.61676 3.43381 8.4327 4.10912 7.93961 4.58537C7.45074 5.05753 6.76928 5.22583 6.01778 5.22583C5.26666 5.22583 4.58977 5.05761 4.10865 4.57929C3.62679 4.10025 3.45658 3.42491 3.45658 2.6749C3.45658 1.92514 3.62675 1.25281 4.11302 0.779164ZM7.64486 7.79897L4.39071 7.79898C3.37206 7.79898 2.5501 8.62094 2.5501 9.6307V10.6499L9.48547 10.6499V9.6307C9.48547 8.62093 8.6635 7.79897 7.64486 7.79897ZM4.39071 6.59898L7.64486 6.59898C9.32204 6.59897 10.6855 7.95399 10.6855 9.6307V11.2499C10.6855 11.5813 10.4168 11.8499 10.0855 11.8499L1.9501 11.8499C1.79097 11.8499 1.63836 11.7867 1.52583 11.6742C1.41331 11.5616 1.3501 11.409 1.3501 11.2499V9.6307C1.3501 7.954 2.71353 6.59898 4.39071 6.59898Z";
++                break;
++            case "settings":
++                iconPathData = "M13.3903 2.99663C13.3912 2.99244 13.3921 2.98823 13.3929 2.984L11.9211 2.69436L13.3903 2.99663ZM13.3125 3.375L12.9945 4.92093C12.7482 6.11765 11.9193 6.99351 10.9969 7.47304C10.7601 7.59618 10.5286 7.73078 10.3025 7.87583C9.4222 8.44049 8.25769 8.69953 7.11826 8.3183L5.47929 7.76993L3.79932 10.5804L4.93623 11.5482C5.90755 12.3751 6.25253 13.587 6.14612 14.6808C6.13502 14.795 6.12929 14.9001 6.12929 14.9999C6.12929 15.0998 6.13502 15.205 6.14613 15.3191C6.25254 16.413 5.90754 17.6249 4.93623 18.4518L3.79936 19.4195L5.4793 22.2301L7.11826 21.6817C8.25769 21.3005 9.42218 21.5595 10.3025 22.1241C10.5286 22.2691 10.76 22.4037 10.9969 22.5268C11.9193 23.0064 12.7482 23.8822 12.9945 25.079L13.3126 26.625H16.687L17.0038 25.0807C17.2495 23.8831 18.0787 23.0064 19.0016 22.5265C19.2383 22.4035 19.4695 22.269 19.6955 22.1241C20.5758 21.5595 21.7402 21.3005 22.8797 21.6817L24.5201 22.2306L26.1987 19.4197L25.0652 18.4548C24.0906 17.6251 23.7482 16.4096 23.8523 15.3175C23.8631 15.2045 23.8686 15.0997 23.8686 14.9999C23.8686 14.9002 23.8631 14.7954 23.8523 14.6825C23.7482 13.5904 24.0905 12.375 25.0652 11.5452L26.1987 10.5803L24.5201 7.76945L22.8797 8.3183C21.7403 8.69953 20.5757 8.44049 19.6954 7.87583C19.4695 7.7309 19.2382 7.5964 19.0016 7.47334C18.0787 6.99345 17.2495 6.11678 17.0038 4.91917L16.687 3.375H13.3125ZM16.6093 2.99576L18.0786 2.69436L16.6075 2.98721C16.6081 2.99007 16.6087 2.99292 16.6093 2.99576ZM19.5487 2.3962C19.5491 2.39796 19.5494 2.39973 19.5498 2.4015L19.9426 4.31633C19.9716 4.45759 20.0959 4.66102 20.3856 4.81166C20.7064 4.97847 21.0162 5.15888 21.3152 5.35068C21.5667 5.51203 21.792 5.51874 21.9278 5.47332L23.9215 4.80627C23.932 4.80276 23.9425 4.79937 23.953 4.7961L23.9629 4.79304C25.0952 4.44181 26.3198 4.91623 26.9203 5.93747L28.9909 9.4046L28.999 9.41841L29.0087 9.43502C29.6102 10.4671 29.3942 11.7808 28.4941 12.566L27.508 11.4356L28.4803 12.5778L27.0099 13.8296C26.9149 13.9104 26.8096 14.0916 26.8388 14.3978C26.8568 14.5874 26.8686 14.7886 26.8686 14.9999C26.8686 15.2113 26.8568 15.4126 26.8388 15.6022C26.8096 15.9084 26.9149 16.0895 27.0099 16.1704L28.4803 17.4222L27.508 18.5644L28.4941 17.434C29.3943 18.2192 29.6101 19.533 29.0086 20.565L28.999 20.5816L28.9909 20.5953L26.9206 24.0621C26.3199 25.0853 25.0924 25.5599 23.9589 25.2058L23.9501 25.203C23.9405 25.2 23.931 25.1969 23.9215 25.1937L21.9278 24.5267C21.792 24.4813 21.5667 24.488 21.3151 24.6493C21.0161 24.8411 20.7063 25.0215 20.3855 25.1883C20.0959 25.3389 19.9716 25.5423 19.9426 25.6836L19.5498 27.5983C19.5494 27.6001 19.5491 27.6019 19.5487 27.6037C19.3122 28.7791 18.2794 29.625 17.08 29.625H12.9176C11.7182 29.625 10.686 28.7783 10.4509 27.6029L10.056 25.6835C10.027 25.5424 9.90267 25.3392 9.6132 25.1887C9.29213 25.0218 8.98207 24.8413 8.68281 24.6493C8.43121 24.488 8.20592 24.4813 8.07014 24.5267L6.07646 25.1937C6.06696 25.1969 6.05743 25.2 6.04787 25.203L6.03809 25.206C4.90494 25.5601 3.67803 25.0848 3.07877 24.0613L1.00737 20.5958L0.997529 20.5791L0.987696 20.5621C0.389311 19.531 0.604947 18.2205 1.50217 17.4355L2.48987 18.5643L1.51759 17.4222L2.99161 16.1674C3.08612 16.0869 3.18933 15.9088 3.16022 15.6096C3.1416 15.4182 3.12929 15.2144 3.12929 14.9999C3.12929 14.7855 3.1416 14.5817 3.16021 14.3904C3.18932 14.0912 3.0861 13.9131 2.99161 13.8326L1.51759 12.5778L2.4899 11.4357L1.50217 12.5645C0.604969 11.7795 0.389297 10.4691 0.987596 9.43793L0.997478 9.4209L1.00738 9.40409L3.07911 5.93818C3.67813 4.91675 4.90219 4.44164 6.03414 4.79276L6.04491 4.7961C6.05547 4.79937 6.06598 4.80276 6.07646 4.80627L8.07014 5.47332C8.20592 5.51874 8.43119 5.51203 8.68274 5.35068C8.982 5.15872 9.29207 4.97817 9.61315 4.81125C9.90267 4.66074 10.027 4.4575 10.056 4.31635L10.4509 2.39696C10.686 1.22164 11.7181 0.375 12.9175 0.375H17.0801C18.2795 0.375 19.3122 1.22088 19.5487 2.3962ZM4.37054 6.70125L5.26379 7.23518L5.26815 7.22215L4.37054 6.70125ZM5.28869 7.23407L5.2845 7.24756L5.65781 7.47071C5.66128 7.46528 5.66465 7.45975 5.66791 7.45413L5.28869 7.23407ZM4.37054 23.2988L5.26852 22.779L5.26379 22.7648L4.37054 23.2988ZM5.28256 22.7536L5.28712 22.7682L5.66873 22.5473C5.6652 22.5412 5.66155 22.5352 5.65778 22.5293L5.28256 22.7536ZM11.9212 27.3055L13.3929 27.0159C13.3921 27.0117 13.3912 27.0075 13.3903 27.0033L11.9212 27.3055ZM18.0788 27.3056L16.6093 27.0041C16.6087 27.007 16.6081 27.0098 16.6075 27.0127L18.0788 27.3056ZM25.6293 23.2987L24.7343 22.7643L24.7304 22.7761L25.6293 23.2987ZM24.7117 22.7652L24.7155 22.7531L24.3417 22.5298C24.3385 22.5347 24.3355 22.5397 24.3326 22.5448L24.7117 22.7652ZM25.6293 6.70122L24.7308 7.22503L24.7343 7.23572L25.6293 6.70122ZM24.7136 7.2481L24.7102 7.23703L24.3334 7.45666C24.3361 7.46125 24.3388 7.46578 24.3416 7.47024L24.7136 7.2481ZM14.9992 12.75C13.7576 12.75 12.7492 13.7584 12.7492 14.9999C12.7492 16.2415 13.7577 17.25 14.9992 17.25C16.2408 17.25 17.2492 16.2415 17.2492 14.9999C17.2492 13.7584 16.2408 12.75 14.9992 12.75ZM9.74921 14.9999C9.74921 12.1015 12.1008 9.75002 14.9992 9.75002C17.8976 9.75002 20.2492 12.1015 20.2492 14.9999C20.2492 17.8983 17.8977 20.25 14.9992 20.25C12.1008 20.25 9.74921 17.8983 9.74921 14.9999Z";
++                break;
++        }
++        return iconPathData;
++    }
++    getTextWidth(text, font) {
++        var canvas = this.canvas || (this.canvas = document.createElement("canvas"));
++        var context = canvas.getContext("2d");
++        context.font = font || '12px arial';
++        var metrics = context.measureText(text);
++        return metrics.width;
++    }
++}
+diff --git a/src/components/AlignmentMap/RelaxedMap/DiagramHelper/diagram-template-helper.tsx b/src/components/AlignmentMap/RelaxedMap/DiagramHelper/diagram-template-helper.tsx
+new file mode 100644
+index 00000000..26811f2d
+--- /dev/null
++++ b/src/components/AlignmentMap/RelaxedMap/DiagramHelper/diagram-template-helper.tsx
+@@ -0,0 +1,764 @@
++import { Box, IconButton, Tooltip, Typography } from '@material-ui/core';
++import React, { useState, useEffect } from 'react';
++import '../../../../styles/alignmentMap.scss';
++import OKRFlag from '../../../../images/okrFlag.svg';
++import { IndividualSmallIcon, LinkIcon, PrivateIcon } from '../../../../config/svg/CommonSvg';
++import krFlag from '../../../../images/krFlag.svg';
++import CircularProgress from '../../../OkrAction/CircularProgress';
++import { UserAvatarGroup } from '../../../Common/UserAvatarGroup';
++import { Enums } from '../../../../config/enums';
++import { getCurrentUserDetails, getMonthDate } from '../../../../config/utils';
++import { OKRButton } from '../../../Common/OKRButton';
++import { SettingsIcon } from '../../../../config/svg/MyGoalSvg';
++import { RightArrowIcon } from '../../../../config/svg/ArrowSvg';
++import { OkrPopperMenu } from '../../../OkrAction/OkrPopperMenu';
++import { GoalAttributes } from '../../AlignmentListing/GoalAttributes';
++import { getDifferenceBetweenDates } from '../../../../config/utils';
++import { OkrProgressBar } from '../../../OkrAction/OkrProgressBar';
++import moment from 'moment';
++import { getLocalStorageItem } from '../../../../services/StorageService';
++import AlertDialog from '../../../Common/Dialog';
++
++export class DiagramTemplateHelper {
++	props: any;
++	userDetail: any;
++	keyAttribute: any = {};
++	keyRes: boolean = false;
++	public dataUpdated: any = {};
++	defaultGaolDateError = { error: '', helperText: '', type: '' };
++	showKr: boolean = false;
++	goalAttrDateError: any = this.defaultGaolDateError;
++	snackbarProps: any = {};
++	keyData: any = {};
++	defaultKRDateError: any = { error: '', helperText: '', type: '' };
++	krAttrDateError: any = this.defaultKRDateError;
++	year: any;
++	krLoader: boolean = false;
++	objectiveDetail: any;
++	okr: any;
++	modalPropsKR: any = { open: false, type: '', message: '' };
++	goalsAttribute: any = {};
++	openObjectAttribute: boolean = false;
++	loader: boolean = false;
++	isSaveDisabled: boolean = true;
++	constructor(properties: any) {
++		this.props = properties;
++		this.dataUpdated = {};
++		this.objectiveDetail = {
++			...this.props.goalDetailObject,
++			myGoalsDetails: [{ ...this.props.keyDetailObject }]
++		};
++		this.userDetail = JSON.parse(getLocalStorageItem('userDetail') || '{}');
++		this.year = getLocalStorageItem('currentYear');
++	}
++	setIsSaveDisabled(value: boolean) {
++		this.isSaveDisabled = value;
++	}
++	setLoader(value: boolean) {
++		this.loader = value;
++	}
++	setOpenObjectAttribute(value: boolean) {
++		this.openObjectAttribute = value;
++	}
++	setGoalsAttribute(value: any) {
++		this.goalsAttribute = value;
++	}
++	setmodalPropsKR(value: any) {
++		this.modalPropsKR = value;
++	}
++	setObjectiveDetail(value: any) {
++		this.objectiveDetail = value;
++	}
++	setKrLoader(value: any) {
++		this.krLoader = true;
++	}
++	setKRAttrDateError(value: any) {
++		this.krAttrDateError = value;
++	}
++	setKeyData(value: any) {
++		this.keyData = value;
++	}
++	setSnackbarProps(value: any) {
++		this.snackbarProps = value;
++	}
++	setKeyAttribute(value: any) {
++		this.keyAttribute = value;
++	}
++	setKeyRes(value: boolean) {
++		this.keyRes = value;
++	}
++	setdataUpdated(value: any) {
++		this.dataUpdated(value);
++	}
++	setShowKr(value: boolean) {
++		this.showKr = value;
++	}
++	setGaolAttrDateError(value: any) {
++		this.goalAttrDateError = value;
++	}
++	public getTemplate(node: any) {
++		let okr = node.data;
++
++		let nodeTemplate = <div>test</div>;
++		if (node.id.indexOf("_okrFirstRow") >= 0) {
++			nodeTemplate = getFirstRowTemplate(node.data, this);
++		}
++		if (node.id.indexOf("_okrKrItem") >= 0) {
++			nodeTemplate = getKrItemTemplate(node.data, this);
++		}
++		return nodeTemplate;
++	}
++	handleAcceptDeclineClick = (open: Boolean, okr: any, kr: any, type: String, KRType: String) => {
++		let t = this.props.t;
++		if (okr.objectiveId > 0) {
++			Promise.allSettled([this.props.getOkrDetail(okr.objectiveId), this.props.getKrDetail(kr.krId)]).then((response: any) => {
++				if (response) {
++					let getOKRDetail =
++						Boolean(response) && response.length && response[0] && response[0].value ? response[0].value : '';
++					let getKRDetail =
++						Boolean(response) && response.length && response[1] && response[1].value ? response[1].value : '';
++					if (getOKRDetail.status === 200 && getKRDetail.status === 200) {
++						if (getKRDetail.data.entity.krStatusId === Enums.KR_STATUS_PENDING) {
++							this.props.setOpenDrawer({
++								open: true,
++								okr: getOKRDetail.data.entity,
++								kr: getKRDetail.data.entity,
++								type: type,
++								KRType: 'WithParent',
++							});
++						} else {
++							this.props.setModalProps({
++								open: true,
++								type: 'AcceptKR',
++								message: t('actionAlreadyTaken'),
++								module: 'user',
++								isCancel: true,
++							});
++						}
++					}
++				}
++			});
++		}
++	};
++	handleKRClick = async (krObj: any, okrObj: any) => {
++		let okrs = JSON.parse(JSON.stringify(this.props.listOkrResult));
++		let currentORK = okrs.myGoalOkrResponses.filter((item: any) => item.goalObjectiveId === okrObj.objectiveId);
++		let getKR = currentORK[0].myGoalsDetails.filter((kr: any) => kr.goalKeyId === krObj.krId);
++		let obj = {
++			kr: getKR[0],
++			okr: currentORK[0],
++			actionType: 'editKR',
++			goalDetail: {},
++			showAttributeDrawer: true,
++		};
++		getKR[0] = {
++			...getKR[0],
++			contributors: getKR[0].contributors.filter(
++				(item: any) => !item.isSource && item.employeeId !== this.userDetail.employeeId
++			),
++		};
++		this.setKeyRes(true);
++		this.setKeyAttribute(getKR[0]);
++		this.setdataUpdated(obj);
++	};
++	handleDrawerClose = async (_event: any, type: String) => {
++		this.setShowKr(false);
++		this.setGaolAttrDateError(this.defaultGaolDateError);
++		let keyAttribute = this.keyAttribute;
++		let t = this.props.t
++		if (type === 'save') {
++			this.setSnackbarProps({});
++			const datesDifferenceInDays = moment(
++				new Date(keyAttribute.startDate ? keyAttribute.startDate : this.keyData?.startDate || new Date())
++			).isAfter(new Date(keyAttribute.dueDate ? keyAttribute.dueDate : this.keyData.dueDate || new Date()), 'days');
++			if (Boolean(datesDifferenceInDays)) {
++				this.setGaolAttrDateError({
++					error: t('startDateDueDateError'),
++					helperText: t('startDateDueDateError'),
++					type: 'dueDate',
++				});
++			} else {
++				let year = this.year;
++				const { showAttributeDrawer, actionType } = this.dataUpdated || {};
++				if (showAttributeDrawer && actionType === 'editKR') {
++					const data = { ...keyAttribute, year };
++					if (this.validateAddKRForm(data)) {
++						this.setKrLoader(true);
++						const response = await this.props.updateKrAttributes(data);
++						if (response && response.data && response.data.status === 200) {
++							this.setSnackbarProps({ show: true, message: response?.data?.messageList?.Result, variant: 'success' });
++							this.setKrLoader(false);
++							this.props.setGoalDetail({});
++							this.setdataUpdated({});
++							this.setShowKr(false);
++							this.props.fetchOkr();
++							this.props.getAlignmentData();
++						} else {
++							this.setSnackbarProps({
++								show: true,
++								message: t('someErrorOccurred'),
++								variant: 'error',
++							});
++							this.setKrLoader(false);
++						}
++						this.setKRAttrDateError(this.defaultKRDateError);
++						this.props.setOpenDrawer(false);
++						this.setKeyAttribute({});
++					}
++				} else {
++					if (this.validateAddKRForm(keyAttribute)) {
++						let dataUpdated = this.dataUpdated
++						if (showAttributeDrawer && actionType === 'addNewKr') {
++							this.setdataUpdated({ ...dataUpdated, kr: { ...dataUpdated.kr, ...keyAttribute }, saved: true });
++							this.setKRAttrDateError(this.defaultKRDateError);
++							this.props.setOpenDrawer(false);
++							this.setKeyAttribute({});
++							this.setShowKr(false);
++						} else {
++							this.updateFormDetail(this.keyData, '', '', true, keyAttribute);
++							this.setKRAttrDateError(this.defaultKRDateError);
++							this.props.setOpenDrawer(false);
++							this.setKeyAttribute({});
++							this.setShowKr(false);
++						}
++					}
++				}
++			}
++		} else if (type === 'close') {
++			if (!this.isKRAttributeUpdated()) {
++				this.setmodalPropsKR({
++					open: true,
++					type: 'editKR',
++					message: t('unSavedItemAlert'),
++					module: 'user',
++					details: { id: '' },
++				});
++			} else {
++				this.setKeyRes(false);
++				this.setGoalsAttribute({});
++				this.props.setOpenDrawer(false);
++			}
++		}
++	};
++	isKRAttributeUpdated = () => {
++		let dataUpdated = this.dataUpdated;
++		if ((dataUpdated && dataUpdated.actionType === 'editKR') || dataUpdated.actionType === 'addNewKr') {
++			const keyDetailsRes = dataUpdated?.okr.assignmentTypeId === 1 ? dataUpdated.okr : dataUpdated.kr;
++			return this.checkFormValues(keyDetailsRes);
++		} else {
++			return this.checkFormValues(this.keyData);
++		}
++	};
++
++	checkFormValues = (keyData: any) => {
++		let keyAttribute = this.keyAttribute;
++		return (keyAttribute.startDate && !getDifferenceBetweenDates(keyData.startDate, keyAttribute.startDate)) ||
++			(keyAttribute.dueDate && !getDifferenceBetweenDates(keyAttribute.dueDate, keyData.dueDate)) ||
++			(keyAttribute.metricId && keyAttribute.metricId !== keyData.metricId) ||
++			(keyAttribute.currencyId && keyAttribute.currencyId !== keyData.currencyId) ||
++			(keyAttribute.startValue && keyAttribute.startValue !== keyData.startValue) ||
++			(keyAttribute.targetValue && keyAttribute.targetValue !== keyData.targetValue) ||
++			(keyAttribute?.keyNotes && keyAttribute?.keyNotes !== keyData.keyNotes) ||
++			(keyAttribute?.keyDescription && keyAttribute?.keyDescription !== keyData.keyDescription) ||
++			(keyAttribute.contributors && keyAttribute.contributors.length !== keyData.contributors.length - 1)
++			? false
++			: true;
++	};
++	updateFormDetail = (item: any, key: any, value: any, isKeyData: Boolean, keyAttribute: any) => {
++		const { myGoalsDetails } = this.objectiveDetail;
++		let updatedDetail = [];
++		if (isKeyData) {
++			let keyAttribute = this.keyAttribute;
++			updatedDetail = myGoalsDetails.map((element: any) => {
++				if (element.id === item.id) {
++					element.startDate = keyAttribute.startDate ? keyAttribute.startDate : element.startDate;
++					element.dueDate = keyAttribute.dueDate ? keyAttribute.dueDate : element.dueDate;
++					element.startValue = keyAttribute.startValue ? keyAttribute.startValue : element.startValue;
++					element.targetValue = keyAttribute.targetValue ? keyAttribute.targetValue : element.targetValue;
++					element.metricId = keyAttribute.metricId ? keyAttribute.metricId : element.metricId;
++					element.currencyId = keyAttribute.currencyId ? keyAttribute.currencyId : element.currencyId;
++					element.showCurrentTarget = keyAttribute.showCurrentTarget
++						? keyAttribute.showCurrentTarget
++						: element.showCurrentTarget;
++					element.metricName = keyAttribute.metricName ? keyAttribute.metricName : element.metricName;
++					element.contributors = keyAttribute.contributors ? keyAttribute.contributors : element.contributors;
++					element.keyNotes = keyAttribute.keyNotes ? keyAttribute.keyNotes : element.keyNotes;
++					element.keyDescription = keyAttribute.keyDescription ? keyAttribute.keyDescription : element.keyDescription;
++					element.isNewKey = false;
++				}
++				return element;
++			});
++		} else {
++			updatedDetail = myGoalsDetails.map((element: any) => {
++				if (element.id === item.id) {
++					if (key === 'keyDescription' || key === 'dueDate') {
++						element.isTyped = true;
++						element.isNewKey = false;
++					}
++					element[key] = value;
++				} else {
++					element.isTyped = false;
++				}
++				return element;
++			});
++		}
++
++		this.setObjectiveDetail({ ...this.objectiveDetail, isTyped: false, myGoalsDetails: updatedDetail });
++		// if (key === 'keyDescription' || key === 'dueDate') {
++		// 	getCallAutoSave({ ...objectiveDetail, isTyped: false, myGoalsDetails: updatedDetail });
++		// }
++	};
++	validateAddKRForm = (formData: any) => {
++		let t = this.props.t;
++		if (formData?.metricId === Enums.ONE || formData?.metricId === Enums.TWO || formData?.metricId === Enums.THREE) {
++			if (formData.startValue === formData.targetValue) {
++				this.setKRAttrDateError({
++					error: t('startCurrentSameError'),
++					helperText: t('startCurrentSameError'),
++					type: 'targetValue',
++				});
++				return false;
++			}
++		}
++		if (formData.keyDescription === '') {
++			this.setKRAttrDateError({
++				error: t('keyResultError'),
++				helperText: t('keyResultError'),
++				type: 'keyDescription',
++			});
++			return false;
++		} else if (formData.keyDescription.trim() === '') {
++			this.setKRAttrDateError({
++				error: t('keyResultError'),
++				helperText: t('keyResultError'),
++				type: 'keyDescription',
++			});
++			return false;
++		}
++		return true;
++	};
++	handleKebabClick = (kr: any, type: any) => {
++		// let krDlt = okr.filter((item:any ) => item.goalObjectiveId)
++		if (type === 2) {
++			this.setKeyData(this.okr);
++		} else if (type === 4) {
++			this.setKeyData(kr);
++		}
++	};
++	isGoalAttributeUpdated = () => {
++		let objectiveDetail = this.objectiveDetail;
++		let isSaveDisabled = this.isSaveDisabled;
++		let goalsAttribute = this.goalsAttribute;
++		return objectiveDetail &&
++			!isSaveDisabled &&
++			((goalsAttribute.objectiveDescription &&
++				objectiveDetail.objectiveDescription !== goalsAttribute.objectiveDescription) ||
++				objectiveDetail.name !== goalsAttribute.name ||
++				objectiveDetail.isPrivate !== goalsAttribute?.isPrivate ||
++				(goalsAttribute.startDate && !getDifferenceBetweenDates(objectiveDetail.startDate, goalsAttribute.startDate)) ||
++				(goalsAttribute.endDate && !getDifferenceBetweenDates(goalsAttribute.endDate, objectiveDetail.endDate)))
++			? false
++			: isSaveDisabled
++				? true
++				: true;
++	};
++	validGoalAttributeAlignmentForm = (formAlignData: any) => {
++		let t = this.props.t;
++		if (!formAlignData.objectiveName) {
++			this.setGaolAttrDateError({
++				helperText: t('objectiveNameError'),
++				type: 'objectiveName',
++				error: t('objectiveNameError'),
++			});
++			return false;
++		} else if (formAlignData.objectiveName?.trim() === '') {
++			this.setGaolAttrDateError({
++				type: 'objectiveName',
++				helperText: t('objectiveNameError'),
++				error: t('objectiveNameError'),
++			});
++			return false;
++		}
++		return true;
++	};
++	handleCloseObjectiveAttribute = async (event: any, type: String) => {
++		this.setShowKr(false);
++		this.setGaolAttrDateError(this.defaultGaolDateError);
++		let t = this.props.t;
++		if (type === 'save') {
++			this.setSnackbarProps({});
++			let goalsAttribute = this.goalsAttribute;
++			let objectiveDetail = this.objectiveDetail;
++			const datesDifferenceInDays = moment(
++				new Date(goalsAttribute.startDate ? goalsAttribute.startDate : objectiveDetail.startDate || new Date())
++			).isAfter(
++				new Date(goalsAttribute.endDate ? goalsAttribute.endDate : objectiveDetail.endDate || new Date()),
++				'days'
++			);
++			if (Boolean(datesDifferenceInDays)) {
++				this.setGaolAttrDateError({
++					error: t('startDateDueDateError'),
++					helperText: t('startDateDueDateError'),
++					type: 'dueDate',
++				});
++			} else {
++				let goalDetail = this.props.goalDetail;
++				if (goalDetail && goalDetail.showAttributeDrawer && goalDetail.actionType === 'editGoal') {
++					if (this.validGoalAttributeAlignmentForm(goalsAttribute)) {
++						this.setLoader(true);
++						const data = { ...goalsAttribute };
++						const response = await this.props.updateGoalAttributes(data);
++						if (response && response.data && response.data.status === 200) {
++							this.setSnackbarProps({ show: true, message: response?.data?.messageList?.Result, variant: 'success' });
++							this.setLoader(false);
++							this.setIsSaveDisabled(true);
++							this.setGaolAttrDateError(this.defaultGaolDateError);
++							// setOpenDrawer(false);
++							this.setOpenObjectAttribute(false);
++							this.setGoalsAttribute({});
++							this.props.setGoalDetail({});
++							this.props.fetchOkr();
++							this.props.getAlignmentData();
++						}
++					}
++				} else {
++					if (this.validGoalAttributeAlignmentForm(goalsAttribute)) {
++						if (goalsAttribute.teamOkrRequests?.length > 0) {
++							objectiveDetail.goalTypeId = 1;
++						}
++						this.setObjectiveDetail({
++							...objectiveDetail,
++							objectiveName: goalsAttribute.objectiveName
++								? goalsAttribute.objectiveName
++								: objectiveDetail.objectiveName,
++							isPrivate:
++								goalsAttribute.isPrivate === false
++									? goalsAttribute.isPrivate
++									: objectiveDetail.isPrivate
++										? objectiveDetail.isPrivate
++										: goalsAttribute.isPrivate,
++							objectiveDescription: goalsAttribute.objectiveDescription
++								? goalsAttribute.objectiveDescription
++								: objectiveDetail.objectiveDescription,
++							startDate: goalsAttribute.startDate ? goalsAttribute.startDate : objectiveDetail.startDate,
++							endDate: goalsAttribute.endDate ? goalsAttribute.endDate : objectiveDetail.endDate,
++							myGoalsDetails: goalsAttribute.myGoalsDetails
++								? goalsAttribute.myGoalsDetails
++								: objectiveDetail.myGoalsDetails,
++							teamOkrRequests: goalsAttribute.teamOkrRequests
++								? goalsAttribute.teamOkrRequests
++								: objectiveDetail.teamOkrRequests,
++						});
++						this.setIsSaveDisabled(true);
++						this.setGaolAttrDateError(this.defaultGaolDateError);
++						this.props.setOpenDrawer(false);
++						this.setGoalsAttribute({});
++					}
++				}
++			}
++		} else if (type === 'close') {
++			this.setShowKr(false);
++			this.props.setGoalDetail({});
++			if (!this.isGoalAttributeUpdated()) {
++				this.props.setModalProps({
++					open: true,
++					type: 'GoalAttr',
++					message: t('unSavedItemAlert'),
++					module: 'user',
++					details: { id: '' },
++				});
++			} else {
++				this.setGoalsAttribute({});
++				this.props.setOpenDrawer(false);
++				this.props.setOpenDrawer(false);
++			}
++		}
++	};
++	handleCloseModal = async (event: any, type: Number) => {
++		if (type === 1) {
++			this.setmodalPropsKR({ open: false, type: '', message: '', module: '' });
++			this.setKeyRes(false);
++		} else {
++			this.setmodalPropsKR({ open: false, type: '', message: '', module: '' });
++		}
++	};
++	openSettingsDrawer = async () => {
++		const okrDtl = await this.props.getOkrDetail(this.okr.objectiveId);
++		this.setGoalsAttribute(okrDtl.data.entity);
++		this.setOpenObjectAttribute(true);
++	};
++}
++function getKrItemTemplate(data: any, relaxMapContext: any) {
++	let context = relaxMapContext.diagramTemplateHelperContext;	
++	let props = context.props;
++	let okr = data.okr;
++	context.okr = okr;
++	let kr = data.kr;
++	let t = props.t;
++	let currentUser = props.currentUser;
++	let handleDeleteOkr = props.handleDeleteOkr.bind(context);;
++	let handleAcceptDeclineClick = context.handleAcceptDeclineClick.bind(context);
++	let handleKRClick = context.handleKRClick.bind(context);
++	let keyAttribute = context.keyAttribute;
++	let setKeyAttribute = context.setKeyAttribute.bind(context);
++	let keyRes = context.keyRes;
++	let dataUpdated = context.dataUpdated;
++	let setdataUpdated = context.setdataUpdated.bind(context);
++	let handleDrawerClose = context.handleDrawerClose.bind(context);
++	let krLoader = context.krLoader;
++	let showKr = context.showKr;
++	let handleKebabClick = context.handleKebabClick.bind(context);
++	let openObjectAttribute = context.openObjectAttribute;
++	let objectiveDetail = context.objectiveDetail;
++	let modalPropsKR = context.modalPropsKR;
++	let handleCloseModal = context.handleCloseModal.bind(context);;
++	let handleCloseObjectiveAttribute = context.handleCloseObjectiveAttribute.bind(context);
++	let isGoalAttributeUpdated = context.isGoalAttributeUpdated;
++	let setIsSaveDisabled = context.setIsSaveDisabled.bind(context);
++	let setGoalsAttribute = context.setGoalsAttribute.bind(context);
++	let goalsAttribute = context.goalsAttribute;
++	let goalAttrDateError = context.goalAttrDateError;
++	let setGaolAttrDateError = context.setGaolAttrDateError.bind(context);
++	return (
++		<Box>
++			<Box className='alignment-kr kr-list'>
++				<Box className='kr-item' key={`kr_${kr?.krId}`}>
++					{okr?.parent !== '' && (
++						<IconButton className='connect-icon connect-icon-link'>
++							<LinkIcon />
++						</IconButton>
++					)}
++					<Box className='kr-item-col1'>
++						<img src={krFlag} alt='kr flag' />
++						{kr?.krName.length > 40 ? (
++							<Tooltip arrow placement='top' title={kr?.krName}>
++								<Typography variant='h4' className='kr-details'>
++									{kr?.krName.substring(0, 40)}...
++				</Typography>
++							</Tooltip>
++						) : (
++							<Typography variant='h4' className='kr-details'>
++								{kr?.krName}
++							</Typography>
++						)}
++					</Box>
++					<Box className='kr-item-col2'>
++						<OkrProgressBar
++							parentOkr={okr}
++							okr={kr}
++							type={'krAlignmentMap'}
++							t={t}
++							updateProgress={props.updateProgress}
++							showEditLoader={() => { }}
++							currentUser={currentUser}
++							okrMasterData={props.okrMasterData}
++						/>
++
++						{kr.krStatusId === Enums.KR_STATUS_PENDING ? (
++							<OkrPopperMenu
++								{...props}
++								poperClassName={'alignment-popper-menu popper-menu-list okr-list-popper-menu'}
++								okr={okr}
++								kr={kr}
++								type={4}
++								t={t}
++								handleDeleteOkr={handleDeleteOkr}
++								KRType={'WithParent'}
++								alignmentMap={true}
++								handleAcceptDeclineClick={handleAcceptDeclineClick}
++								currentUser={currentUser}
++								poperPlacement={'bottom-start'}
++								poperContainer={false}
++								handleKRClick={handleKRClick}
++								keyAttribute={keyAttribute}
++								setKeyAttribute={setKeyAttribute}
++								keyRes={keyRes}
++								// setKeyRes={setKeyRes}
++								dataUpdated={dataUpdated}
++								setdataUpdated={setdataUpdated}
++								goalDetail={dataUpdated}
++								setGoalDetail={setdataUpdated}
++								handleDrawerClose={handleDrawerClose}
++								keyData={dataUpdated.kr}
++								handleKebabClick={handleKebabClick}
++								loader={krLoader}
++								showKr={showKr}
++							/>
++						) : (
++							<OkrPopperMenu
++								key={kr?.krId}
++								{...props}
++								poperClassName={'alignment-popper-menu popper-menu-list okr-list-popper-menu'}
++								okr={okr}
++								kr={kr}
++								type={2}
++								t={t}
++								handleDeleteOkr={handleDeleteOkr}
++								alignmentMap={true}
++								currentUser={currentUser}
++								poperPlacement={'bottom-start'}
++								poperContainer={false}
++								handleKRClick={handleKRClick}
++								keyAttribute={keyAttribute}
++								setKeyAttribute={setKeyAttribute}
++								keyRes={keyRes}
++								// setKeyRes={setKeyRes}
++								showKr={showKr}
++								dataUpdated={dataUpdated}
++								setdataUpdated={setdataUpdated}
++								goalDetail={dataUpdated}
++								setGoalDetail={setdataUpdated}
++								handleDrawerClose={handleDrawerClose}
++								keyData={dataUpdated.kr}
++								loader={krLoader}
++								handleKebabClick={handleKebabClick}
++							/>
++						)}
++					</Box>
++					{openObjectAttribute && (
++						<GoalAttributes
++							durationCycleDetail={props.durationCycleDetail}
++							currentCycleEndDate={props.currentCycleEndDate}
++							open={openObjectAttribute}
++							handleDrawerClose={handleCloseObjectiveAttribute}
++							objectiveDetail={objectiveDetail}
++							t={t}
++							{...props}
++							isGoalAttributeUpdated={isGoalAttributeUpdated}
++							setIsSaveDisabled={setIsSaveDisabled}
++							setGoalsAttribute={setGoalsAttribute}
++							goalsAttribute={goalsAttribute}
++							loader={krLoader}
++							goalAttrDateError={goalAttrDateError}
++							setGaolAttrDateError={setGaolAttrDateError}
++						/>
++					)}
++
++				</Box>
++			</Box>
++			{modalPropsKR.open && (
++				<AlertDialog
++					module={modalPropsKR.module ? modalPropsKR.module : 'user'}
++					message={modalPropsKR.message}
++					handleCloseModal={handleCloseModal}
++					modalOpen={modalPropsKR.open}
++				/>
++			)}</Box>
++	);
++}
++function getFirstRowTemplate(okr: any, relaxMapContext: any) {
++	let context = relaxMapContext.diagramTemplateHelperContext;	
++	context.okr = okr;
++	let props = context.props;
++	let t = props.t;
++	let currentUser = props.currentUser;
++	let handleDeleteOkr = props.handleDeleteOkr;
++	let openSettingsDrawer = context.openSettingsDrawer;
++	return (
++		<Box className='alignment-card relaxed-card'>
++			<Box className='objective-section'>
++				<Box className='cardHeader'>
++					{okr?.isContributorExist === true && (
++						<IconButton className='connect-icon connect-icon-first'>
++							<IndividualSmallIcon />
++						</IconButton>
++					)}
++					{okr?.isSourceExist === true && (
++						<IconButton className='connect-icon connect-icon-arrow'>
++							<RightArrowIcon />
++						</IconButton>
++					)}
++					<Box className='cardHeader-col1'>
++						<Box className='cardFlag'>
++							<img src={OKRFlag} alt={'Okr flag'} />
++						</Box>
++						<Box className='okr-after-edit'>
++							{okr?.name.length > 92 ? (
++								<Tooltip title={okr?.name} arrow>
++									<Typography variant='h4' className='cardTitle'>
++										{okr?.name.substring(0, 92)}...
++						</Typography>
++								</Tooltip>
++							) : (
++								<Typography variant='h4' className='cardTitle'>
++									{okr?.name}
++								</Typography>
++							)}
++						</Box>
++					</Box>
++					<Box className='cardHeader-col2'>
++						{/* {okr.okrViewKeyResults &&
++				okr.okrViewKeyResults.find((item: any) => item.krStatusId === 0 || item.krStatusId === 2) && ( */}
++						<OkrPopperMenu
++							{...props}
++							poperClassName={'alignment-popper-menu popper-menu-list okr-list-popper-menu'}
++							okr={okr}
++							type={1}
++							t={t}
++							currentUser={currentUser}
++							handleDeleteOkr={handleDeleteOkr}
++							alignmentMap={true}
++							poperPlacement={'bottom-start'}
++							poperContainer={false}
++						/>
++						{/* )} */}
++					</Box>
++				</Box>
++				<Box className='card-toggle'>
++					{okr?.isPrivate === false ? (
++						<OKRButton className='button-gray-kr ' text={'Individual'} icon={<IndividualSmallIcon />} />
++					) : (
++						<OKRButton className='button-gray-kr ' text={'Private'} icon={<PrivateIcon />} />
++					)}
++					<Box className='okr-field-actions' onClick={openSettingsDrawer.bind(context)}>
++						<OKRButton className='settings-btn' icon={<SettingsIcon />} title={'Attributes'} />
++					</Box>
++				</Box>
++				<Box className='alignedRow'>
++					<Box className='usersAligned'>
++						<UserAvatarGroup
++							{...props}
++							contributorDetails={
++								okr.okrViewContributors && okr.okrViewContributors.length
++									? okr.okrViewContributors.filter(
++										(items: any) =>
++											(items.goalStatusId && items.goalStatusId === Enums.KR_STATUS_ACCEPTED) ||
++											items.userType !== 'Owner'
++									)
++									: []
++							}
++							addButtonClassName='add-btn'
++							avatarClassName=''
++							isButtonVisible={false}
++							max={3}
++							loginUserAvatar={
++								okr.okrViewContributors && okr.okrViewContributors.length
++									? okr.okrViewContributors.find((itemKR: any) => itemKR.userType === 'Owner')
++										? okr.okrViewContributors.find((itemKR: any) => itemKR.userType === 'Owner')
++										: okr
++									: okr
++							}
++							currentUser={currentUser}
++							contributorDetailsType={true}
++							isOnHoverVisible={true}
++							poperContainer={false}
++						/>
++					</Box>
++
++					<Box className='cycleProgress'>
++						<Box className='quaterCycle'>
++							<Box className='date-settings alignment-date-settings'>
++								<Box className='calender-date'>{getMonthDate(okr?.dueDate)}</Box>
++								<Typography variant='body2'>Cycle: {okr?.cycle}</Typography>
++							</Box>
++						</Box>
++
++						<Box className='progressChart'>
++							<CircularProgress percentage={okr?.score} score={okr.score} dueDate={okr.dueDate} />
++						</Box>
++					</Box>
++				</Box>
++			</Box>
++		</Box>
++	);
++}
+diff --git a/src/components/AlignmentMap/RelaxedMap/index.jsx b/src/components/AlignmentMap/RelaxedMap/index.jsx
+index 0f522770..682764a3 100644
+--- a/src/components/AlignmentMap/RelaxedMap/index.jsx
++++ b/src/components/AlignmentMap/RelaxedMap/index.jsx
+@@ -10,6 +10,7 @@ import {
+ 	ChildArrangement,
+ 	LineDistribution,
+ 	ConnectionPointOrigin,
++	NodeConstraints
+ } from '@syncfusion/ej2-react-diagrams';
+ import { Box, Typography } from '@material-ui/core';
+ import { SampleBase } from './sample-base';
+@@ -17,12 +18,18 @@ import { DataManager } from '@syncfusion/ej2-data';
+ import { MenuComponent } from '@syncfusion/ej2-react-navigations';
+ import { ToolbarComponent } from '@syncfusion/ej2-react-navigations';
+ import { getLocalStorageItem } from '../../../services/StorageService';
+-import ObjectiveCard from '../AlignmentListing/ObjectiveCard';
+-import StandaloneCard from '../AlignmentListing/StandaloneCard';
+-
++import { CustomDiagramLayout } from './DiagramHelper/diagram-layout';
++import { DiagramHelper } from './DiagramHelper/diagram-helper';
++import { DiagramOkrHelper } from './DiagramHelper/diagram-okr-helper';
++import { DiagramTemplateHelper } from './DiagramHelper/diagram-template-helper';
+ let diagramInstance;
+-let template;
++let diagramLayoutHelper;
++let diagramBox;
++let diagramOkrHelper;
++let diagramTemplateHelper;
++let currentProps;
+ export default class RelaxedMap extends SampleBase {
++	diagramTemplateHelperContext;
+ 	constructor(props) {
+ 		super(props);
+ 		const { alignResult } = this.props;
+@@ -31,7 +38,9 @@ export default class RelaxedMap extends SampleBase {
+ 			mapData: alignResult,
+ 			loggedInUser: userDetail,
+ 		};
+-		template = this.diagramTemplate;
++		diagramLayoutHelper = new CustomDiagramLayout();
++		this.diagramTemplateHelperContext = diagramTemplateHelper = new DiagramTemplateHelper(this.props);
++		diagramOkrHelper = new DiagramOkrHelper(diagramTemplateHelper);
+ 	}
+ 
+ 	onItemClick(args) {
+@@ -55,64 +64,6 @@ export default class RelaxedMap extends SampleBase {
+ 				break;
+ 		}
+ 	}
+-
+-	diagramTemplate = (data) => {
+-		let cardobject = document.querySelectorAll('.foreign-object .foreign-object');
+-		if (cardobject.length > 0) {
+-			cardobject.forEach(function (value, index) {
+-				value.style.zIndex = cardobject.length - index;
+-			});
+-		}
+-		if (data.data && data.data.objectiveType === 2) {
+-			return (
+-				<StandaloneCard
+-					{...this.props}
+-					data={data}
+-					userDetail={this.props.userDetail}
+-					handleDeleteOkr={this.props.handleDeleteOkr}
+-					setOpenDrawer={this.props.setOpenDrawer}
+-					setModalProps={this.props.setModalProps}
+-					updateProgress={this.props.updateProgress}
+-					showEditLoader={this.props.showEditLoader}
+-				/>
+-			);
+-		}
+-		return (
+-			<ObjectiveCard
+-				{...this.props}
+-				data={data}
+-				userDetail={this.props.userDetail}
+-				handleDeleteOkr={this.props.handleDeleteOkr}
+-				setModalProps={this.props.setModalProps}
+-				updateProgress={this.props.updateProgress}
+-				showEditLoader={this.props.showEditLoader}
+-				showAddGoalForm={this.props.showAddGoalForm}
+-				showAddGoal={this.props.showAddGoal}
+-				durationCycleDetail={this.props.durationCycleDetail}
+-				currentCycleEndDate={this.props.currentCycleEndDate}
+-				currentCycleId={this.props.currentCycleId}
+-				year={this.props.year}
+-				t={this.props.t}
+-				fetchOkr={this.props.fetchOkr}
+-				setGoalDetail={this.props.setGoalDetail}
+-				setIsGoalCreated={this.props.setIsGoalCreated}
+-				saveAndEditObjectiveAndKr={this.props.saveAndEditObjectiveAndKr}
+-				setFormSubmit={this.props.setFormSubmit}
+-				formSubmit={this.props.formSubmit}
+-				isGoalCreated={this.props.isGoalCreated}
+-				keyDetailObject={this.props.keyDetailObject}
+-				goalDetailObject={this.props.goalDetailObject}
+-				// showApiMsgs={showApiMsgs}
+-				// isTabChanged={isTabChanged}
+-				// setIsTabChanged={setIsTabChanged}
+-				// addObjectiveCallback={addObjectiveCallback}
+-			/>
+-		);
+-	};
+-	// rendereComplete() {
+-	// 	// diagramInstance.reset();
+-	// 	// diagramInstance.fitToPage();
+-	// }
+ 	RenameCard = (data) => {
+ 		alert(data.data.TextToShow);
+ 	};
+@@ -142,153 +93,154 @@ export default class RelaxedMap extends SampleBase {
+ 	}
+ 
+ 	render() {
+-		const { alignResult } = this.props;
+-		//const { t } = useTranslation();
+-		let alignmentData = [];
+-		if (alignResult.length <= 0) {
+-			return (
+-				<Box className='welcome-content'>
+-					<Box textAlign='center'>
+-						<Typography>Loading...</Typography>
+-						{/* <AnimatedIcon className='' width='519' type='image/svg+xml' alt='WelcomeImage' imagePath={AlignmentImage} />
++		if (!diagramBox) {
++			const { alignResult } = this.props;
++			let alignmentData = [];
++			if (alignResult.length <= 0) {
++				return (
++					<Box className='welcome-content'>
++						<Box textAlign='center'>
++							<Typography>Loading...</Typography>
++							{/* <AnimatedIcon className='' width='519' type='image/svg+xml' alt='WelcomeImage' imagePath={AlignmentImage} />
+ 						<Typography variant='h2'>Setting Objectives is the first step towards success</Typography>
+ 						<Typography>Start aligning to Organizational Objectives</Typography> */}
++						</Box>
+ 					</Box>
+-				</Box>
+-			);
+-		} else {
+-			alignmentData =
+-				alignResult &&
+-				alignResult.length > 0 &&
+-				alignResult.map((item, i) => {
++				);
++			} else {
++				alignmentData = alignResult;
++				alignmentData.forEach((item, i) => {
+ 					//item.index = i + 1;
+ 					if (item.parent.length === 0) {
+ 						item.parent = '';
+ 					}
+ 					return item;
+ 				});
+-		}
++				//DiagramHelper.UpdateChildOkrs(alignmentData);
++			}
+ 
+-		return (
+-			<Box className='diagram-control-pane'>
+-				<MenuComponent items={this.menuItems} />
+-				<Box className='control-panel'>
++			diagramBox = (
++				<Box className='diagram-control-pane'>
++					<MenuComponent items={this.menuItems} />
++					<Box className='control-panel'>
++						<Box className='control-section'>
++							<Box className='content-wrapper'>
++								<ToolbarComponent
++									id='toolbar_diagram'
++									clicked={this.onItemClick}
++									items={[
++										{
++											type: 'Button',
++											//tooltipText: 'ZoomIn',
++											text: 'Zoom In',
++											//prefixIcon: 'e-diagram-icons e-diagram-zoomin',
++										},
++										{
++											type: 'Button',
++											//tooltipText: 'ZoomOut',
++											text: 'Zoom Out',
++											//prefixIcon: 'e-diagram-icons e-diagram-zoomout',
++										},
++										{
++											type: 'Button',
++											//tooltipText: 'Reset',
++											text: 'Reset',
++											//prefixIcon: 'e-diagram-icons e-diagram-reset',
++										},
++										{
++											type: 'Button',
++											//tooltipText: 'Reset',
++											text: 'ToggleExpand',
++											//prefixIcon: 'e-diagram-icons e-diagram-reset',
++										},
++									]}
++								/>
++							</Box>
++						</Box>
++					</Box>
+ 					<Box className='control-section'>
+ 						<Box className='content-wrapper'>
+-							<ToolbarComponent
+-								id='toolbar_diagram'
+-								clicked={this.onItemClick}
+-								items={[
+-									{
+-										type: 'Button',
+-										//tooltipText: 'ZoomIn',
+-										text: 'Zoom In',
+-										//prefixIcon: 'e-diagram-icons e-diagram-zoomin',
+-									},
+-									{
+-										type: 'Button',
+-										//tooltipText: 'ZoomOut',
+-										text: 'Zoom Out',
+-										//prefixIcon: 'e-diagram-icons e-diagram-zoomout',
+-									},
+-									{
+-										type: 'Button',
+-										//tooltipText: 'Reset',
+-										text: 'Reset',
+-										//prefixIcon: 'e-diagram-icons e-diagram-reset',
+-									},
+-									{
+-										type: 'Button',
+-										//tooltipText: 'Reset',
+-										text: 'ToggleExpand',
+-										//prefixIcon: 'e-diagram-icons e-diagram-reset',
++							<DiagramComponent
++								id='diagram'
++								ref={(diagram) => (diagramInstance = diagram)}
++								width={'100%'}
++								height={'1500px'}
++								nodeTemplate={diagramTemplateHelper.getTemplate.bind(this)}
++								snapSettings={{ constraints: SnapConstraints.None }}
++								dataSourceSettings={{
++									id: 'objectiveUniqueId',
++									parentId: 'parent',
++									dataSource: new DataManager(alignmentData),
++									doBinding: (nodeModel, data, diagram) => {
++										// if (nodeModel.excludeFromLayout) {
++										// 	nodeModel.nodeTemplate = template.bind(data);
++										// 	nodeModel.template = template;
++										// nodeModel.shape = {
++										// 	type: 'HTML',
++										// };
++										// }
++									}
++								}}
++								//tool={DiagramTools.ZoomPan}
++								layout={{
++									connectionPointOrigin: ConnectionPointOrigin.SamePoint,
++									enableAnimation: true,
++									type: 'ComplexHierarchicalTree',
++									orientation: 'LeftToRight',
++									horizontalSpacing: 200,
++									verticalSpacing: 130,
++									arrangement: ChildArrangement.Linear,
++									getLayoutInfo: (node, options) => {
++										/* tslint:disable:no-string-literal */
++										if (node.data['TextToShow'] === 'General Manager') {
++											options.assistants.push(options.children[0]);
++											options.children.splice(0, 1);
++										}
++										if (!options.hasSubTree) {
++											options.type = 'Right';
++										}
+ 									},
+-								]}
+-							/>
+-						</Box>
+-					</Box>
+-				</Box>
+-				<Box className='control-section'>
+-					<Box className='content-wrapper'>
+-						<DiagramComponent
+-							id='diagram'
+-							ref={(diagram) => (diagramInstance = diagram)}
+-							width={'100%'}
+-							height={'1500px'}
+-							snapSettings={{ constraints: SnapConstraints.None }}
+-							nodeTemplate={template}
+-							// backgroundColor='#6BA5D7'
+-							//configures data source settings
+-							dataSourceSettings={{
+-								id: 'objectiveUniqueId',
+-								parentId: 'parent',
+-								//dataSource: new DataManager(localBindData),
+-								dataSource: new DataManager(alignmentData),
+-								doBinding: (nodeModel, data, diagram) => {
+-									nodeModel.nodeTemplate = template.bind(data);
+-									nodeModel.template = template;
+-									nodeModel.style = { boder: '1px solid #000000' };
+-									nodeModel.shape = {
+-										type: 'HTML',
+-									};
+-								},
+-							}}
+-							//Disables all interactions except zoom/pan
+-							tool={DiagramTools.ZoomPan}
+-							//Configures automatic layout
+-							layout={{
+-								// connectionPointOrigin: ConnectionPointOrigin.DifferentPoint,
+-								connectionPointOrigin: ConnectionPointOrigin.SamePoint,
+-								enableAnimation: true,
+-								type: 'ComplexHierarchicalTree',
+-								// type: 'HierarchicalTree',
+-								orientation: 'LeftToRight',
+-								// orientation: 'TopToBottom',
+-								horizontalSpacing: 200,
+-								verticalSpacing: 130,
+-								arrangement: ChildArrangement.Linear,
+-								// arrangement: ChildArrangement.NonLinear,
+-								getLayoutInfo: (node, options) => {
++								}}
++								//Defines the default node and connector properties
++								getNodeDefaults={(obj, diagram) => {
++									obj.nodeTemplate = diagramTemplateHelper.getTemplate.bind(obj.data);
++									obj.template = diagramTemplateHelper.getTemplate;
+ 									/* tslint:disable:no-string-literal */
+-									if (node.data['TextToShow'] === 'General Manager') {
+-										options.assistants.push(options.children[0]);
+-										options.children.splice(0, 1);
+-									}
+-									if (!options.hasSubTree) {
+-										options.type = 'Right';
+-									}
+-								},
+-							}}
+-							//Defines the default node and connector properties
+-							getNodeDefaults={(obj, diagram) => {
+-								/* tslint:disable:no-string-literal */
+-								return nodeDefaults(obj, diagram);
+-							}}
+-							getConnectorDefaults={(connector, diagram) => {
+-								return connectorDefaults(connector, diagram);
+-							}}
+-							/* created={() => {
+-								return expandAll(true);
+-							}} */
+-						>
+-							<Inject services={[DataBinding, LayoutAnimation, ComplexHierarchicalTree, LineDistribution]} />
+-						</DiagramComponent>
++									//obj.constraints = NodeConstraints.Default & ~NodeConstraints.Select;
++									if (!obj.excludeFromLayout)
++										return nodeDefaults(obj, diagram);
++								}}
++								getConnectorDefaults={(connector, diagram) => {
++									return connectorDefaults(connector, diagram);
++								}}
++								created={() => {
++									diagramOkrHelper.CreateOkrNodes(diagramInstance, diagramTemplateHelper);
++									diagramLayoutHelper.DockToTop(diagramInstance, diagramOkrHelper);
++									// return expandAll(true);
++								}}
++							>
++								<Inject services={[DataBinding, LayoutAnimation, ComplexHierarchicalTree, LineDistribution]} />
++							</DiagramComponent>
++						</Box>
+ 					</Box>
++					{/* <button onClick={() => expandAll()}>Expand All</button> */}
+ 				</Box>
+-				{/* <button onClick={() => expandAll()}>Expand All</button> */}
+-			</Box>
+-		);
++			);
++		}
++		return diagramBox;
+ 	}
+ }
+ 
+ //sets default value for Node.
+ function nodeDefaults(obj, diagram) {
+ 	//obj.backgroundColor = obj.data.color;
++	obj.pivot = { x: 0, y: 0 };
+ 	obj.style = {
+-		fill: 'none',
+-		strokeColor: 'none',
++		fill: 'white',
++		strokeColor: '#9CD3FF',
++		strokeWidth: 1,
+ 		color: 'white',
+-		borderCorner: '30',
++		borderCorner: 30,
+ 	};
+ 	obj.expandIcon = {
+ 		height: 24,
+@@ -310,9 +262,9 @@ function nodeDefaults(obj, diagram) {
+ 	obj.margin = { left: 10, right: 10, top: 0, bottom: 0 };
+ 	obj.collapseIcon.fill = 'white';
+ 	obj.collapseIcon.borderColor = '#39a3fa';
+-	obj.width = 500;
+-	obj.height = 180;
+-	obj.offsetX = window.innerWidth / 2;
++	obj.width = 520;
++	obj.height = diagramOkrHelper.GetOkrHeight(obj);
++	obj.offsetX = -window.innerWidth / 2;
+ 	// obj.offsetY = obj.data.index * 300;
+ 	// if (obj.data && obj.data.objectiveType === 1) {
+ 	// 	obj.offsetY = obj.data.index * 120;
+diff --git a/src/components/AlignmentMap/style.scss b/src/components/AlignmentMap/style.scss
+index 6683d44f..6c0f4ba6 100644
+--- a/src/components/AlignmentMap/style.scss
++++ b/src/components/AlignmentMap/style.scss
+@@ -195,16 +195,16 @@
+ 			display: none;
+ 		}
+ 	}
+-	.relaxed-tab{
+-		.diagram-control-pane{
+-				[id*="_tarDec_groupElement"] {
+-					@include transform(translate(-20px , -60px));
+-				}
+-				[id*="_path_groupElement"] {					
+-					@include transform(translate(-0px , -60px));
+-				}
+-		}
+-	}
++	// .relaxed-tab{
++	// 	.diagram-control-pane{
++	// 			[id*="_tarDec_groupElement"] {
++	// 				@include transform(translate(-20px , -60px));
++	// 			}
++	// 			[id*="_path_groupElement"] {					
++	// 				@include transform(translate(-0px , -60px));
++	// 			}
++	// 	}
++	// }
+ 	.compact-tab{
+ 		.diagram-control-pane{
+ 			[id*="_tarDec_groupElement"] {
+@@ -462,15 +462,15 @@
+ 
+ .alignment-card {
+ 	max-width: 31.25em;
+-	border: 1px solid $backgroundColor13;
+-	@include border-radius(0.375em);
+-	@include box-shadow(0px 0px 5px $color3Light4);
+-	background-color: $backgroundColor1;
+-	padding: 0.625em;
++	// border: 1px solid $backgroundColor13;
++	// @include border-radius(0.375em);
++	// @include box-shadow(0px 0px 5px $color3Light4);
++	 background-color: $backgroundColor1;
++	// padding: 0.625em;
+ 	position: relative;
+ 	min-width: 31.25em;
+ 	&:hover{	
+-	   @include box-shadow(0px 10px 30px $color3Light3);
++	//    @include box-shadow(0px 10px 30px $color3Light3);
+ 		.card-toggle{
+ 			.okr-field-actions{
+ 				opacity: 1;
+@@ -589,63 +589,61 @@
+ 					
+ 		}
+ 		
+-	}
+-	.kr-list {
++	}	
++}
++.alignment-kr.kr-list {
++	@include flex;
++	flex-direction: column;
++	// margin-top: 1em;
++	.kr-item {
++		// margin-top: 5px;
++		background: $backgroundColor9;
++		border: 1px solid $backgroundColor12;
++		@include border-radius(6px);
++		padding: 3px 0px 3px 8px;
+ 		@include flex;
+-		flex-direction: column;
+-		margin-top: 1em;
+-		.kr-item {
+-			margin-top: 5px;
+-			background: $backgroundColor9;
+-			border: 1px solid $backgroundColor12;
+-			@include border-radius(6px);
+-			padding: 3px 0px 3px 8px;
++		align-items: center;
++		justify-content: space-between;
++		position: relative;
++		.connect-icon.connect-icon-link{
++			left: -2.0625em;
++			top: 50%;
++			margin-top: -12px;
++		}
++		.kr-item-col1{
++		   @include flex;
++			align-items: flex-start;
++			padding-right: 1.25em;
++			.kr-details {
++				overflow: hidden;
++				padding-left: 0.4375em;
++				font-weight: normal;
++			}
++		}
++		.kr-item-col2{
+ 			@include flex;
+ 			align-items: center;
+-			justify-content: space-between;
+-			position: relative;
+-			.connect-icon.connect-icon-link{
+-				left: -2.0625em;
+-				top: 50%;
+-				margin-top: -12px;
+-			}
+-			.kr-item-col1{
+-			   @include flex;
+-			    align-items: flex-start;
+-				padding-right: 1.25em;
+-				.kr-details {
+-					overflow: hidden;
+-					padding-left: 0.4375em;
+-					font-weight: normal;
+-				}
++			.kr-percentage {
++				min-width: 3.1875em;
++				background: #f8f9fa;
++				border: 1px solid #e1e1e2;
++				box-sizing: border-box;
++				@include border-radius(6px);
++				color: $backgroundColor7;
++				font-weight: $fontWeightBold;
++				padding: 0.125em 0.4375em;
++				margin: 0 0.3125em;
++				text-align: center;
++				cursor: pointer;
+ 			}
+-			.kr-item-col2{
+-				@include flex;
+-			    align-items: center;
+-				.kr-percentage {
+-					min-width: 3.1875em;
+-					background: #f8f9fa;
+-					border: 1px solid #e1e1e2;
+-					box-sizing: border-box;
+-					@include border-radius(6px);
+-					color: $backgroundColor7;
+-					font-weight: $fontWeightBold;
+-					padding: 0.125em 0.4375em;
+-					margin: 0 0.3125em;
+-					text-align: center;
+-					cursor: pointer;
+-				}
+-				.kebab-icon{
+-					padding: 0;
+-					width: 20px;
+-                    height: 20px;  
+-					margin:0px;
+-				}
++			.kebab-icon{
++				padding: 0;
++				width: 20px;
++				height: 20px;  
++				margin:0px;
+ 			}
+ 		}
+ 	}
+-	
+-	
+ }
+ .MuiIconButton-root.connect-icon {
+ 	position: absolute;
