@@ -1,0 +1,2936 @@
+ .../DiagramHelper/diagram-selection-helper.jsx     |  542 +++--
+ .../DiagramHelper/diagram-template-helper.tsx      |    4 +-
+ .../RelaxedMap/DiagramHelper/okr_data.tsx          | 2327 ++++----------------
+ src/config/url.js                                  |    4 +-
+ 4 files changed, 789 insertions(+), 2088 deletions(-)
+
+diff --git a/src/components/AlignmentMap/RelaxedMap/DiagramHelper/diagram-selection-helper.jsx b/src/components/AlignmentMap/RelaxedMap/DiagramHelper/diagram-selection-helper.jsx
+index 44308dfc..0df2eaa4 100644
+--- a/src/components/AlignmentMap/RelaxedMap/DiagramHelper/diagram-selection-helper.jsx
++++ b/src/components/AlignmentMap/RelaxedMap/DiagramHelper/diagram-selection-helper.jsx
+@@ -1,255 +1,321 @@
+ import { AnnotationConstraints } from '@syncfusion/ej2-react-diagrams';
+ let nodeSelectedStyle = {
+-	strokeColor: 'rgba(57,158,247,255)',
+-	fill: 'white',
+-	strokeWidth: 3,
++    strokeColor: 'rgba(57,158,247,255)',
++    fill: 'white',
++    strokeWidth: 3,
+ };
+ let nodeDefaultStyle = {
+-	strokeColor: '#C8C8C8',
+-	fill: 'white',
+-	strokeWidth: 1,
++    strokeColor: '#C8C8C8',
++    fill: 'white',
++    strokeWidth: 1,
+ };
+ let parentConnectorDefaultStyle = {
+-	strokeColor: '#5B708B',
+-	strokeWidth: 3,
+-	opacity: 1,
+-	targetDecorator: {
+-		fill: '#5B708B',
+-		strokeColor: '#5B708B',
+-		opacity: 1,
+-	},
++    strokeColor: '#5B708B',
++    strokeWidth: 3,
++    opacity: 1,
++    targetDecorator: {
++        fill: '#5B708B',
++        strokeColor: '#5B708B',
++        opacity: 1,
++    },
+ };
+ let parentConnectorHiddenStyle = {
+-	strokeColor: '#C8C8C8',
+-	strokeWidth: 3,
+-	opacity: 0.5,
+-	targetDecorator: {
+-		fill: '#C8C8C8',
+-		strokeColor: '#C8C8C8',
+-		opacity: 0.5,
+-	},
++    strokeColor: '#C8C8C8',
++    strokeWidth: 3,
++    opacity: 0.5,
++    targetDecorator: {
++        fill: '#C8C8C8',
++        strokeColor: '#C8C8C8',
++        opacity: 0.5,
++    },
+ };
+ 
+ let connectorDefaultStyle = {
+-	strokeColor: '#C8C8C8',
+-	strokeWidth: 1,
+-	opacity: 0.5,
++    strokeColor: '#C8C8C8',
++    strokeWidth: 1,
++    opacity: 0.5,
+ };
+ let connectorSelectedStyle = {
+-	strokeColor: 'rgba(57,158,247,255)',
+-	strokeWidth: 2,
+-	opacity: 1,
++    strokeColor: 'rgba(57,158,247,255)',
++    strokeWidth: 2,
++    opacity: 1,
+ };
+ export class DiagramSelectionHelper {
+-	//#region Node Selection
+-	diagramIns;
+-	allKrHelperLink = [];
+-	allKrHelperNodes = [];
+-	SetHelpers(diagramInstance) {
+-		this.diagramIns = diagramInstance;
+-	}
+-	GetKrResultItem(args) {
+-		if (args && args.actualObject && args.actualObject && args.actualObject.id.indexOf('okrKrItem_') >= 0) {
+-			return args.actualObject;
+-		}
+-		return null;
+-	}
+-	OnClickDiagram(args, diagramInstance) {
+-		this.SetHelpers(diagramInstance);
+-		this.RemoveAllSelection();
+-		let krItemNode = this.GetKrResultItem(args);
+-		if (krItemNode && krItemNode.data && krItemNode.data.kr) {
+-			let okr = krItemNode.data.okr;
+-			let kr = krItemNode.data.kr;
+-			this.SelectKrResult(kr, okr);
+-		}
+-	}
+-	IsNullOrUndefined(obj) {
+-		return obj == null || obj === undefined;
+-	}
+-	IsSelectionHelper(obj) {
+-		return obj && obj.id.indexOf('_link_helper') >= 0;
+-	}
+-	SelectKrResult(krData, okrData) {
+-		let element = document.getElementById('kr_' + krData.krId);
+-		element.style.border = '2px solid ' + nodeSelectedStyle.strokeColor;
+-		element.classList.add('selected');
+-		if (krData && krData.childOkrs) {
+-			this.AddClass(krData.childOkrs, 'selected');
+-			this.CreateConnections(krData, okrData);
+-		}
+-		this.ToggleParentConnectorStyle(parentConnectorHiddenStyle);
+-	}
+-	CreateConnections(krData, okrData) {
+-		let srcKrId = krData.krId;
+-		let targetElementIds = krData.childOkrs;
+-		let srcKrNode = this.GetNode('okrKrItem_' + srcKrId);
+-		let srcHelperNode = this.GetOrCreateHelperNode(srcKrId, 'source', srcKrNode, '$30k');
+-		for (let i = 0; i < targetElementIds.length; i++) {
+-			let targetKrNode = this.GetNode('okrKrItem_' + targetElementIds[i]);
+-			let targetHelperNode = this.GetOrCreateHelperNode(
+-				'okrKrItem_' + targetElementIds[i],
+-				'target',
+-				targetKrNode,
+-				'$16k'
+-			);
+-			let linkId = srcHelperNode.id + '_' + targetHelperNode.id + '_link_helper';
+-			let link = this.GetConnector(linkId);
+-			if (!link || !link.id) {
+-				link = {
+-					sourceID: srcHelperNode.id,
+-					targetID: targetHelperNode.id,
+-					sourcePortID: srcHelperNode.id + '-right-mid-port',
+-					targetPortID: targetHelperNode.id + '-left-mid-port',
+-					id: srcHelperNode.id + '_' + targetHelperNode.id + '_link_helper',
+-					sourceDecorator: { shape: 'None' },
+-					targetDecorator: { shape: 'None' },
+-					type: 'Bezier',
+-				};
+-				link.style = {
+-					strokeColor: connectorSelectedStyle.strokeColor,
+-					strokeWidth: connectorSelectedStyle.strokeWidth,
+-				};
+-				this.diagramIns.add(link);
+-				this.allKrHelperLink.push(link);
+-			}
+-			link.visible = true;
+-		}
+-	}
++    //#region Node Selection
++    diagramIns;
++    allKrHelperLink = [];
++    allKrHelperNodes = [];
++    reachedMyOkr = false;
++    SetHelpers(diagramInstance) {
++        this.diagramIns = diagramInstance;
++    }
++    GetKrResultItem(args) {
++        if (args && args.actualObject && args.actualObject && args.actualObject.id.indexOf('okrKrItem_') >= 0) {
++            return args.actualObject;
++        }
++        return null;
++    }
++    OnClickDiagram(args, diagramInstance) {
++        this.SetHelpers(diagramInstance);
++        this.RemoveAllSelection();
++        let krItemNode = this.GetKrResultItem(args);
++        if (krItemNode && krItemNode.data && krItemNode.data.kr) {
++            let rootKrNode = this.GetRootKrNode(krItemNode, krItemNode.data.kr);
++            if (rootKrNode && rootKrNode.data && rootKrNode.data.kr) {
++                let okr = rootKrNode.data.okr;
++                let kr = rootKrNode.data.kr;
++                this.SelectKrResult(kr, okr);
++            }
++        }
++    }
++    GetRootKrNode(krItemNode, krData) {
++        let parentNode = krItemNode;
++        let isParentKrFound = true;
++        while (isParentKrFound) {
++            let parentKrNode = this.GetNode("okrKrItem_" + krData.parentId);
++            if (parentKrNode && parentKrNode.data && parentKrNode.data.kr) {
++                parentNode = parentKrNode;
++                krData = parentNode.data.kr;
++            } else {
++                isParentKrFound = false;
++            }
++        }
++        return parentNode;
++    }
++    IsNullOrUndefined(obj) {
++        return obj == null || obj === undefined;
++    }
++    IsSelectionHelper(obj) {
++        return obj && obj.id.indexOf('_link_helper') >= 0;
++    }
++    SelectKrResult(krData, okrData) {
++        let element = document.getElementById('kr_' + krData.krId);
++        element.style.border = '2px solid ' + nodeSelectedStyle.strokeColor;
++        element.classList.add('selected');
++        if (krData && krData.childOkrs) {
++            this.AddClass(krData.childOkrs, 'selected');
++            this.CreateConnections(krData, okrData);
++        }
++        this.ToggleParentConnectorStyle(parentConnectorHiddenStyle);
++    }
++    GetOrCreateHelperLink(srcHelperNode, targetHelperNode) {
++        let linkId = srcHelperNode.id + '_' + targetHelperNode.id + '_link_helper';
++        let link = this.GetConnector(linkId);
++        if (!link || !link.id) {
++            link = {
++                sourceID: srcHelperNode.id,
++                targetID: targetHelperNode.id,
++                sourcePortID: srcHelperNode.id + '-right-mid-port',
++                targetPortID: targetHelperNode.id + '-left-mid-port',
++                id: srcHelperNode.id + '_' + targetHelperNode.id + '_link_helper',
++                sourceDecorator: { shape: 'None' },
++                targetDecorator: { shape: 'None' },
++                type: 'Bezier',
++            };
++            link.style = {
++                strokeColor: connectorSelectedStyle.strokeColor,
++                strokeWidth: connectorSelectedStyle.strokeWidth
++            };
++            this.diagramIns.add(link);
++            this.allKrHelperLink.push(link);
++        }
++        return link;
++    }
++    CreateConnections(krData, okrData) {
++        let srcKrId = krData.krId;
++        let targetElementIds = krData.childOkrs;
++        let srcKrNode = this.GetNode('okrKrItem_' + srcKrId);
++        let srcHelperNode = this.GetOrCreateHelperNode(srcKrId, 'source', srcKrNode, krData);
++               
++        for (let i = 0; i < targetElementIds.length; i++) {
++            let targetKrNode = this.GetNode('okrKrItem_' + targetElementIds[i]);
++            let targetKrData = targetKrNode.data.kr;
++            let targetHelperNode = this.GetOrCreateHelperNode('okrKrItem_' + targetElementIds[i], 'target', targetKrNode, targetKrData);
++            let link = this.GetOrCreateHelperLink(srcHelperNode, targetHelperNode);
++            link.visible = true;
++            let isMyOkr = targetKrNode.data.okr && !this.IsNullOrUndefined(targetKrNode.data.okr.isMyOkr) && targetKrNode.data.okr.isMyOkr;
++            if (!this.reachedMyOkr && isMyOkr) {
++                this.reachedMyOkr = true;
++            }
++            if (targetKrData && targetKrData.childOkrs) {
++                this.AddClass(targetKrData.childOkrs, 'selected');
++                this.CreateConnections(targetKrData, targetKrNode.data.okr);
++            }
++        }
++    }
++    CreateSourceHelperNode(nodeId, krNode, krData) {
++        let helperNode = {
++            id: nodeId,
++            width: 50,
++            height: 15,
++            style: {
++                strokeColor: nodeSelectedStyle.strokeColor,
++                fill: nodeSelectedStyle.strokeColor,
++                strokeWidth: 1,
++            },
++            annotations: [{
++                constraints: AnnotationConstraints.ReadOnly,
++                style: {
++                    color: 'white',
++                    opacity: 1
++                }
++            }],
++            pivot: { x: 0, y: 0 },
++            ports: [{
++                style: {
++                    strokeColor: '#366F8C',
++                    fill: '#366F8C',
++                },
++                shape: 'Square',
++                id: nodeId + '-right-mid-port',
++                visibility: 2,
++                offset: {
++                    x: 1,
++                    y: 0.5,
++                }
++            }]
++        };
++        helperNode.offsetX = krNode.offsetX + krNode.width;
++        helperNode.offsetY = krNode.offsetY + krNode.height / 2 - helperNode.height / 2;
++        if (!this.IsNullOrUndefined(krData.outValue)) {
++            helperNode.annotations[0].content = krData.outValue;
++        }
++        this.diagramIns.add(helperNode);
++        this.allKrHelperNodes.push(helperNode);
++        return helperNode;
++    }
++    CreateTargetHelperNode(nodeId, krNode, krData) {
++        let helperNode = {
++            id: nodeId,
++            width: 50,
++            height: 15,
++            pivot: { x: 0, y: 0 },
++            shape: {
++                type: 'Path',
++                data: 'M 0 5 L 5 0 L 20 0 L 20 10 L 5 10 z',
++            },
++            style: {
++                strokeColor: nodeSelectedStyle.strokeColor,
++                fill: 'white',
++                strokeWidth: 1,
++            },
++            annotations: [{
++                constraints: AnnotationConstraints.ReadOnly,
++                style: {
++                    color: nodeSelectedStyle.strokeColor,
++                }
++            }],
++            ports: [{
++                style: {
++                    strokeColor: '#366F8C',
++                    fill: '#366F8C',
++                },
++                shape: 'Square',
++                id: nodeId + '-left-mid-port',
++                visibility: 2,
++                offset: {
++                    x: 0,
++                    y: 0.5,
++                }
++            }]
++        };
++        if (!this.reachedMyOkr) {
++            helperNode.shape = { type: "Basic", shape: "Ellipse" };
++            helperNode.width = helperNode.height = 24;
++            let helperIconNode = {
++                id: helperNode.id + "_icon",
++                excludeFromLayout: true
++            };
++            helperNode.offsetX = krNode.offsetX - helperNode.width - 5;
++            helperNode.offsetY = krNode.offsetY + krNode.height / 2 - helperNode.height / 2;
+ 
+-	GetOrCreateHelperNode(krId, type, krNode, text) {
+-		let nodeId = type === 'source' ? krId + '_srcNode_link_helper' : krId + '_targetNode_link_helper';
+-		let helperNode = this.diagramIns.getNodeObject(nodeId);
+-		if (!helperNode || !helperNode.id) {
+-			helperNode = {
+-				id: nodeId,
+-				width: 50,
+-				height: 15,
+-
+-				style: {
+-					strokeColor: nodeSelectedStyle.strokeColor,
+-					fill: nodeSelectedStyle.strokeColor,
+-					strokeWidth: 1,
+-				},
+-				annotations: [
+-					{
+-						constraints: AnnotationConstraints.ReadOnly,
+-						content: text,
+-						style: {
+-							color: 'white',
+-							opacity: 1,
+-						},
+-					},
+-				],
+-				pivot: { x: 0, y: 0 },
+-				ports: [
+-					{
+-						style: {
+-							strokeColor: '#366F8C',
+-							fill: '#366F8C',
+-						},
+-						shape: 'Square',
+-						id: helperNode.id + '-right-mid-port',
+-						visibility: 2,
+-						offset: {
+-							x: 1,
+-							y: 0.5,
+-						},
+-					},
+-				],
+-			};
+-			helperNode.offsetY = krNode.offsetY + krNode.height / 2 - helperNode.height / 2;
+-			if (type === 'target') {
+-				helperNode.shape = {
+-					type: 'Path',
+-					data: 'M 0 5 L 5 0 L 20 0 L 20 10 L 5 10 z',
+-				};
+-				helperNode.style = {
+-					strokeColor: nodeSelectedStyle.strokeColor,
+-					fill: 'white',
+-					strokeWidth: 1,
+-				};
+-				helperNode.annotations = [
+-					{
+-						constraints: AnnotationConstraints.ReadOnly,
+-						content: text,
+-						style: {
+-							color: nodeSelectedStyle.strokeColor,
+-						},
+-					},
+-				];
+-				helperNode.ports = [
+-					{
+-						style: {
+-							strokeColor: '#366F8C',
+-							fill: '#366F8C',
+-						},
+-						shape: 'Square',
+-						id: helperNode.id + '-left-mid-port',
+-						visibility: 2,
+-						offset: {
+-							x: 0,
+-							y: 0.5,
+-						},
+-					},
+-				];
+-				helperNode.offsetX = krNode.offsetX - helperNode.width;
+-			} else {
+-				helperNode.offsetX = krNode.offsetX + krNode.width;
+-			}
+-			this.diagramIns.add(helperNode);
+-			this.allKrHelperNodes.push(helperNode);
+-		}
+-		helperNode.visible = true;
+-		return helperNode;
+-	}
+-	RemoveAllSelection() {
+-		this.RemoveClass('.kr-item', 'selected');
+-		for (let i = 0; i < this.allKrHelperNodes.length; i++) {
+-			this.diagramIns.remove(this.allKrHelperNodes[i]);
+-			//this.GetNode(this.allKrHelperNodes[i].id).visible = false;
+-		}
+-		for (let i = 0; i < this.allKrHelperLink.length; i++) {
+-			this.diagramIns.remove(this.allKrHelperLink[i]);
+-			//this.GetConnector(this.allKrHelperLink[i].id).visible = false;
+-		}
+-		this.ToggleParentConnectorStyle(parentConnectorDefaultStyle);
+-	}
+-	ToggleParentConnectorStyle(style) {
+-		let ins = this;
+-		this.diagramIns.connectors.forEach((c) => {
+-			if (!ins.IsSelectionHelper(c)) {
+-				c.style.strokeColor = style.strokeColor;
+-				c.style.opacity = style.opacity;
+-				if (c.targetDecorator) {
+-					c.targetDecorator.style.strokeColor = style.targetDecorator.strokeColor;
+-					c.targetDecorator.style.fill = style.targetDecorator.fill;
+-					c.targetDecorator.style.opacity = style.targetDecorator.opacity;
+-				}
+-			}
+-		});
+-		this.diagramIns.dataBind();
+-	}
+-	GetNode(nodeId) {
+-		let nodeModel = this.diagramIns.nodes.find((n) => n.id === nodeId);
+-		return nodeModel;
+-	}
+-	GetConnector(connectorId) {
+-		let connModel = this.diagramIns.connectors.find((c) => c.id === connectorId);
+-		return connModel;
+-	}
+-	RemoveClass(selector, className) {
+-		document.querySelectorAll(selector).forEach((element) => {
+-			element.classList.remove(className);
+-			element.style.border = '1px solid #cde4ef';
+-		});
+-	}
+-	AddClass(krChilds, className) {
+-		krChilds.forEach((childId) => {
+-			let element = document.getElementById('kr_' + childId);
+-			element.classList.add(className);
+-			element.style.border = '2px solid ' + nodeSelectedStyle.strokeColor;
+-		});
+-	}
+-	//#endregion
++            helperIconNode.width = helperIconNode.height = 11;
++            helperIconNode.shape = {
++                type: 'Path',
++                data: "M6.71854 6.18852L4.52411 3.9941C4.35506 3.82488 4.08076 3.82488 3.91168 3.9941C3.74249 4.16315 3.74249 4.43745 3.91168 4.60652L6.10611 6.80094C6.19072 6.88555 6.30144 6.92784 6.41233 6.92784C6.52321 6.92784 6.63393 6.88555 6.71854 6.80094C6.88773 6.63187 6.88773 6.35757 6.71854 6.18852Z M9.30956 5.10748L8.50042 4.2982C8.33967 4.13758 8.07932 4.13758 7.91856 4.2982C7.75779 4.45895 7.75779 4.71958 7.91856 4.8802L8.72769 5.68948C9.58252 6.54444 9.5817 7.94559 8.72769 8.81111C7.873 9.6658 6.47184 9.66512 5.60605 8.81111L4.79676 8.00198C4.63614 7.84123 4.37552 7.84123 4.21475 8.00198C4.05398 8.16275 4.05398 8.42321 4.21475 8.58385L5.02595 9.39504C5.61947 9.9806 6.39611 10.2736 7.1711 10.2736C7.94773 10.2736 8.72301 9.97936 9.31158 9.39106C10.4841 8.20251 10.4833 6.28108 9.30956 5.10748Z M6.41524 2.2132L5.60405 1.40185C4.41579 0.229494 2.49423 0.230447 1.31857 1.40583C0.146083 2.59424 0.147035 4.51566 1.32063 5.68925L2.12992 6.49854C2.21017 6.57892 2.3155 6.6191 2.42085 6.6191C2.52605 6.6191 2.6314 6.57892 2.71178 6.4984C2.87253 6.33779 2.87253 6.07717 2.71178 5.91654L1.9025 5.10725C1.04768 4.25243 1.04849 2.85128 1.9025 1.98576C2.75745 1.13107 4.1586 1.13191 5.02413 1.98576L5.83341 2.79504C5.99418 2.95581 6.25451 2.95581 6.41528 2.79504C6.57601 2.63443 6.57601 2.37381 6.41524 2.2132Z"
++            }
++            helperIconNode.style = {
++                strokeColor: nodeSelectedStyle.strokeColor,
++                fill: 'white',
++                strokeWidth: 1,
++            }
++            helperIconNode.offsetX = helperNode.offsetX + helperNode.width / 2;
++            helperIconNode.offsetY = helperNode.offsetY + helperNode.height / 2;
++            this.diagramIns.add(helperIconNode);
++            this.allKrHelperNodes.push(helperIconNode);
++        }
++        else {
++            helperNode.offsetX = krNode.offsetX - helperNode.width;
++            helperNode.offsetY = krNode.offsetY + krNode.height / 2 - helperNode.height / 2;
++            if (!this.IsNullOrUndefined(krData.inValue)) {
++                helperNode.annotations[0].content = krData.inValue;
++            }
++        }
++        this.diagramIns.add(helperNode);
++        this.allKrHelperNodes.push(helperNode);
++        return helperNode;
++    }
++    GetOrCreateHelperNode(krId, type, krNode, krData) {
++        let nodeId = type === 'source' ? krId + '_srcNode_link_helper' : krId + '_targetNode_link_helper';
++        let helperNode = this.diagramIns.getNodeObject(nodeId);
++        if (!helperNode || !helperNode.id) {
++            if (type === "source") {
++                helperNode = this.CreateSourceHelperNode(nodeId, krNode, krData);
++            } else {
++                helperNode = this.CreateTargetHelperNode(nodeId, krNode, krData);
++            }
++        }
++        helperNode.visible = true;
++        return helperNode;
++    }
++    RemoveAllSelection() {
++        this.reachedMyOkr = false;
++        this.RemoveClass('.kr-item', 'selected');
++        for (let i = 0; i < this.allKrHelperNodes.length; i++) {
++            this.diagramIns.remove(this.allKrHelperNodes[i]);
++            //this.GetNode(this.allKrHelperNodes[i].id).visible = false;
++        }
++        for (let i = 0; i < this.allKrHelperLink.length; i++) {
++            this.diagramIns.remove(this.allKrHelperLink[i]);
++            //this.GetConnector(this.allKrHelperLink[i].id).visible = false;
++        }
++        this.ToggleParentConnectorStyle(parentConnectorDefaultStyle);
++    }
++    ToggleParentConnectorStyle(style) {
++        let ins = this;
++        this.diagramIns.connectors.forEach((c) => {
++            if (!ins.IsSelectionHelper(c)) {
++                c.style.strokeColor = style.strokeColor;
++                c.style.opacity = style.opacity;
++                if (c.targetDecorator) {
++                    c.targetDecorator.style.strokeColor = style.targetDecorator.strokeColor;
++                    c.targetDecorator.style.fill = style.targetDecorator.fill;
++                    c.targetDecorator.style.opacity = style.targetDecorator.opacity;
++                }
++            }
++        });
++        this.diagramIns.dataBind();
++    }
++    GetNode(nodeId) {
++        let nodeModel = this.diagramIns.nodes.find((n) => n.id === nodeId);
++        return nodeModel;
++    }
++    GetConnector(connectorId) {
++        let connModel = this.diagramIns.connectors.find((c) => c.id === connectorId);
++        return connModel;
++    }
++    RemoveClass(selector, className) {
++        document.querySelectorAll(selector).forEach((element) => {
++            element.classList.remove(className);
++            element.style.border = '1px solid #cde4ef';
++        });
++    }
++    AddClass(krChilds, className) {
++        krChilds.forEach((childId) => {
++            let element = document.getElementById('kr_' + childId);
++            element.classList.add(className);
++            element.style.border = '2px solid ' + nodeSelectedStyle.strokeColor;
++        });
++    }
++    //#endregion
+ }
+diff --git a/src/components/AlignmentMap/RelaxedMap/DiagramHelper/diagram-template-helper.tsx b/src/components/AlignmentMap/RelaxedMap/DiagramHelper/diagram-template-helper.tsx
+index ad06c00f..6190006c 100644
+--- a/src/components/AlignmentMap/RelaxedMap/DiagramHelper/diagram-template-helper.tsx
++++ b/src/components/AlignmentMap/RelaxedMap/DiagramHelper/diagram-template-helper.tsx
+@@ -525,11 +525,11 @@ function getKrItemTemplate(data: any, relaxMapContext: any) {
+ 		<Box>
+ 			<Box className='alignment-kr kr-list'>
+ 				<Box className='kr-item' id={`kr_${kr?.krId}`} key={`kr_${kr?.krId}`}>
+-					{okr?.parent !== '' && (
++					{/* {okr?.parent !== '' && (
+ 						<IconButton className='connect-icon connect-icon-link'>
+ 							<LinkIcon />
+ 						</IconButton>
+-					)}
++					)} */}
+ 					<Box className='kr-item-col1'>
+ 						<img src={krFlag} alt='kr flag' />
+ 						{kr?.krName.length > 40 ? (
+diff --git a/src/components/AlignmentMap/RelaxedMap/DiagramHelper/okr_data.tsx b/src/components/AlignmentMap/RelaxedMap/DiagramHelper/okr_data.tsx
+index be4a29ec..01604858 100644
+--- a/src/components/AlignmentMap/RelaxedMap/DiagramHelper/okr_data.tsx
++++ b/src/components/AlignmentMap/RelaxedMap/DiagramHelper/okr_data.tsx
+@@ -1,1851 +1,484 @@
+ let okrJsonData: any = [
+-	{
+-		employeeId: 398,
+-		owner: 398,
+-		objectiveType: 1,
+-		objectiveId: 5473,
+-		name: 'test',
+-		teamId: 0,
+-		teamName: '',
+-		startDate: '2021-05-04T00:00:00',
+-		dueDate: '2021-06-30T00:00:00',
+-		score: 40,
+-		cycle: 'Q2, 2021',
+-		krStatusId: 0,
+-		progress: 2,
+-		isContributorExist: false,
+-		isSourceExist: false,
+-		isPrivate: false,
+-		objectiveTypeId: 2,
+-		objectiveStatusId: 2,
+-		krCurrentValue: 0,
+-		krStartValue: 0,
+-		krTargetValue: 0,
+-		isSourceLinked: false,
+-		contributorCount: 0,
+-		parentId: 0,
+-		objectiveUniqueId: '5473',
+-		parent: '',
+-		index: 0,
+-		isAnyFeedback: true,
+-		currencyId: 0,
+-		metricId: 0,
+-		assignmentTypeId: 0,
+-		isAligned: false,
+-		okrViewKeyResults: [
+-			{
+-				employeeId: 398,
+-				krId: 6695,
+-				krName: 'test',
+-				krScore: 40,
+-				krCurrentValue: 40,
+-				krProgress: 2,
+-				krStartValue: 0,
+-				krTargetValue: 100,
+-				isSourceLinked: false,
+-				contributorCount: 0,
+-				parentId: 0,
+-				krDueDate: '2021-06-30T00:00:00',
+-				krStatusId: 2,
+-				teamId: 0,
+-				teamName: '',
+-				isAnyFeedback: true,
+-				currencyId: 0,
+-				metricId: 5,
+-				assignmentTypeId: 2,
+-			},
+-		],
+-		okrViewContributors: [
+-			{
+-				employeeId: 398,
+-				firstName: 'Rahul',
+-				lastName: 'Papnoi',
+-				designation: 'Senior Software Engineer',
+-				image:
+-					'https://d1c4w4cknd36sb.cloudfront.net/ProfileImage/8b400028-f60b-4f71-9d92-9a206d50d43d.jpg?Expires=1923804330&Signature=DiQ3-bFDeIdG-5S~18m5MfxgkFp~qfBDaACHA~aDaioJ8cGWK7mIyV~axS69~JK~CoBhDHQJ3sf2BOsQUy~EtaM9rumO2qqMwLtZoyNy~v6RmOq8AIin76~8aguQivdI7oHYgsWAQXpFJGMJbeDm~aiElI-FsQaWEyZ0tLEkTLhcbko4uvbNIqWOLPaQegvekKKn90fbrp9AtC4iyTPXocFfRO2RaylBxywfLgG~9U02J-ANDRVu~YecYKfzyoyjSx3tlY3zYu4AhcFE6uzKJVm-ZkBt0r56qfqnY84lFW89ZSgrNdq2RHfDKQyFYAywUGt4pjyPiMJTNNyZw90fvQ__&Key-Pair-Id=APKAIUVT54QRP2NDQEKQ',
+-				userType: 'Owner',
+-			},
+-		],
+-	},
+-	{
+-		employeeId: 398,
+-		owner: 398,
+-		objectiveType: 1,
+-		objectiveId: 7730,
+-		name: 'Team Okr',
+-		teamId: 415,
+-		teamName: 'Chil1',
+-		startDate: '2021-05-06T00:00:00',
+-		dueDate: '2021-06-30T00:00:00',
+-		score: 50,
+-		cycle: 'Q2, 2021',
+-		krStatusId: 0,
+-		progress: 3,
+-		isContributorExist: false,
+-		isSourceExist: false,
+-		isPrivate: false,
+-		objectiveTypeId: 1,
+-		objectiveStatusId: 2,
+-		krCurrentValue: 0,
+-		krStartValue: 0,
+-		krTargetValue: 0,
+-		isSourceLinked: false,
+-		contributorCount: 0,
+-		parentId: 0,
+-		objectiveUniqueId: '7730',
+-		parent: '',
+-		index: 0,
+-		isAnyFeedback: false,
+-		currencyId: 0,
+-		metricId: 0,
+-		assignmentTypeId: 0,
+-		isAligned: false,
+-		okrViewKeyResults: [
+-			{
+-				employeeId: 398,
+-				krId: 8512,
+-				krName: 'Team Kr',
+-				krScore: 50,
+-				krCurrentValue: 50,
+-				krProgress: 3,
+-				krStartValue: 0,
+-				krTargetValue: 100,
+-				isSourceLinked: false,
+-				contributorCount: 0,
+-				parentId: 0,
+-				krDueDate: '2021-06-30T00:00:00',
+-				krStatusId: 2,
+-				teamId: 415,
+-				teamName: 'Chil1',
+-				isAnyFeedback: false,
+-				currencyId: 0,
+-				metricId: 5,
+-				assignmentTypeId: 2,
+-			},
+-		],
+-		okrViewContributors: [
+-			{
+-				employeeId: 398,
+-				firstName: 'Rahul',
+-				lastName: 'Papnoi',
+-				designation: 'Senior Software Engineer',
+-				image:
+-					'https://d1c4w4cknd36sb.cloudfront.net/ProfileImage/8b400028-f60b-4f71-9d92-9a206d50d43d.jpg?Expires=1923804330&Signature=DiQ3-bFDeIdG-5S~18m5MfxgkFp~qfBDaACHA~aDaioJ8cGWK7mIyV~axS69~JK~CoBhDHQJ3sf2BOsQUy~EtaM9rumO2qqMwLtZoyNy~v6RmOq8AIin76~8aguQivdI7oHYgsWAQXpFJGMJbeDm~aiElI-FsQaWEyZ0tLEkTLhcbko4uvbNIqWOLPaQegvekKKn90fbrp9AtC4iyTPXocFfRO2RaylBxywfLgG~9U02J-ANDRVu~YecYKfzyoyjSx3tlY3zYu4AhcFE6uzKJVm-ZkBt0r56qfqnY84lFW89ZSgrNdq2RHfDKQyFYAywUGt4pjyPiMJTNNyZw90fvQ__&Key-Pair-Id=APKAIUVT54QRP2NDQEKQ',
+-				userType: 'Owner',
+-			},
+-		],
+-	},
+-	{
+-		employeeId: 398,
+-		owner: 398,
+-		objectiveType: 1,
+-		objectiveId: 7731,
+-		name: 'Team Okr',
+-		teamId: 416,
+-		teamName: 'Child 2',
+-		startDate: '2021-05-06T00:00:00',
+-		dueDate: '2021-06-30T00:00:00',
+-		score: 70,
+-		cycle: 'Q2, 2021',
+-		krStatusId: 0,
+-		progress: 4,
+-		isContributorExist: false,
+-		isSourceExist: false,
+-		isPrivate: false,
+-		objectiveTypeId: 1,
+-		objectiveStatusId: 2,
+-		krCurrentValue: 0,
+-		krStartValue: 0,
+-		krTargetValue: 0,
+-		isSourceLinked: false,
+-		contributorCount: 0,
+-		parentId: 0,
+-		objectiveUniqueId: '7731',
+-		parent: '',
+-		index: 0,
+-		isAnyFeedback: false,
+-		currencyId: 0,
+-		metricId: 0,
+-		assignmentTypeId: 0,
+-		isAligned: false,
+-		okrViewKeyResults: [
+-			{
+-				employeeId: 398,
+-				krId: 8514,
+-				krName: 'Team Kr',
+-				krScore: 70,
+-				krCurrentValue: 70,
+-				krProgress: 4,
+-				krStartValue: 0,
+-				krTargetValue: 100,
+-				isSourceLinked: false,
+-				contributorCount: 0,
+-				parentId: 0,
+-				krDueDate: '2021-06-30T00:00:00',
+-				krStatusId: 2,
+-				teamId: 416,
+-				teamName: 'Child 2',
+-				isAnyFeedback: false,
+-				currencyId: 0,
+-				metricId: 5,
+-				assignmentTypeId: 2,
+-			},
+-		],
+-		okrViewContributors: [
+-			{
+-				employeeId: 398,
+-				firstName: 'Rahul',
+-				lastName: 'Papnoi',
+-				designation: 'Senior Software Engineer',
+-				image:
+-					'https://d1c4w4cknd36sb.cloudfront.net/ProfileImage/8b400028-f60b-4f71-9d92-9a206d50d43d.jpg?Expires=1923804330&Signature=DiQ3-bFDeIdG-5S~18m5MfxgkFp~qfBDaACHA~aDaioJ8cGWK7mIyV~axS69~JK~CoBhDHQJ3sf2BOsQUy~EtaM9rumO2qqMwLtZoyNy~v6RmOq8AIin76~8aguQivdI7oHYgsWAQXpFJGMJbeDm~aiElI-FsQaWEyZ0tLEkTLhcbko4uvbNIqWOLPaQegvekKKn90fbrp9AtC4iyTPXocFfRO2RaylBxywfLgG~9U02J-ANDRVu~YecYKfzyoyjSx3tlY3zYu4AhcFE6uzKJVm-ZkBt0r56qfqnY84lFW89ZSgrNdq2RHfDKQyFYAywUGt4pjyPiMJTNNyZw90fvQ__&Key-Pair-Id=APKAIUVT54QRP2NDQEKQ',
+-				userType: 'Owner',
+-			},
+-		],
+-	},
+-	{
+-		employeeId: 398,
+-		owner: 398,
+-		objectiveType: 1,
+-		objectiveId: 7870,
+-		name: 'Okr private',
+-		teamId: 0,
+-		teamName: '',
+-		startDate: '2021-05-10T00:00:00',
+-		dueDate: '2021-06-30T00:00:00',
+-		score: 0,
+-		cycle: 'Q2, 2021',
+-		krStatusId: 0,
+-		progress: 1,
+-		isContributorExist: false,
+-		isSourceExist: false,
+-		isPrivate: true,
+-		objectiveTypeId: 2,
+-		objectiveStatusId: 2,
+-		krCurrentValue: 0,
+-		krStartValue: 0,
+-		krTargetValue: 0,
+-		isSourceLinked: false,
+-		contributorCount: 0,
+-		parentId: 0,
+-		objectiveUniqueId: '7870',
+-		parent: '',
+-		index: 0,
+-		isAnyFeedback: false,
+-		currencyId: 0,
+-		metricId: 0,
+-		assignmentTypeId: 0,
+-		isAligned: false,
+-		okrViewKeyResults: [
+-			{
+-				employeeId: 398,
+-				krId: 8606,
+-				krName: 'kr private',
+-				krScore: 0,
+-				krCurrentValue: 0,
+-				krProgress: 1,
+-				krStartValue: 0,
+-				krTargetValue: 100,
+-				isSourceLinked: false,
+-				contributorCount: 0,
+-				parentId: 0,
+-				krDueDate: '2021-06-30T00:00:00',
+-				krStatusId: 2,
+-				teamId: 0,
+-				teamName: '',
+-				isAnyFeedback: false,
+-				currencyId: 0,
+-				metricId: 5,
+-				assignmentTypeId: 2,
+-			},
+-		],
+-		okrViewContributors: [
+-			{
+-				employeeId: 398,
+-				firstName: 'Rahul',
+-				lastName: 'Papnoi',
+-				designation: 'Senior Software Engineer',
+-				image:
+-					'https://d1c4w4cknd36sb.cloudfront.net/ProfileImage/8b400028-f60b-4f71-9d92-9a206d50d43d.jpg?Expires=1923804330&Signature=DiQ3-bFDeIdG-5S~18m5MfxgkFp~qfBDaACHA~aDaioJ8cGWK7mIyV~axS69~JK~CoBhDHQJ3sf2BOsQUy~EtaM9rumO2qqMwLtZoyNy~v6RmOq8AIin76~8aguQivdI7oHYgsWAQXpFJGMJbeDm~aiElI-FsQaWEyZ0tLEkTLhcbko4uvbNIqWOLPaQegvekKKn90fbrp9AtC4iyTPXocFfRO2RaylBxywfLgG~9U02J-ANDRVu~YecYKfzyoyjSx3tlY3zYu4AhcFE6uzKJVm-ZkBt0r56qfqnY84lFW89ZSgrNdq2RHfDKQyFYAywUGt4pjyPiMJTNNyZw90fvQ__&Key-Pair-Id=APKAIUVT54QRP2NDQEKQ',
+-				userType: 'Owner',
+-			},
+-		],
+-	},
+-	{
+-		employeeId: 398,
+-		owner: 398,
+-		objectiveType: 1,
+-		objectiveId: 8061,
+-		name: 'rahul testing',
+-		teamId: 0,
+-		teamName: '',
+-		startDate: '2021-05-24T00:00:00',
+-		dueDate: '2021-06-30T00:00:00',
+-		score: 0,
+-		cycle: 'Q2, 2021',
+-		krStatusId: 0,
+-		progress: 1,
+-		isContributorExist: false,
+-		isSourceExist: false,
+-		isPrivate: false,
+-		objectiveTypeId: 2,
+-		objectiveStatusId: 2,
+-		krCurrentValue: 0,
+-		krStartValue: 0,
+-		krTargetValue: 0,
+-		isSourceLinked: false,
+-		contributorCount: 0,
+-		parentId: 0,
+-		objectiveUniqueId: '8061',
+-		parent: '',
+-		index: 0,
+-		isAnyFeedback: false,
+-		currencyId: 0,
+-		metricId: 0,
+-		assignmentTypeId: 0,
+-		isAligned: false,
+-		okrViewKeyResults: [
+-			{
+-				employeeId: 398,
+-				krId: 8810,
+-				krName: 'Test Kr1',
+-				krScore: 0,
+-				krCurrentValue: 0,
+-				krProgress: 1,
+-				krStartValue: 0,
+-				krTargetValue: 100,
+-				isSourceLinked: false,
+-				contributorCount: 0,
+-				parentId: 0,
+-				krDueDate: '2021-06-30T00:00:00',
+-				krStatusId: 2,
+-				teamId: 0,
+-				teamName: '',
+-				isAnyFeedback: false,
+-				currencyId: 0,
+-				metricId: 5,
+-				assignmentTypeId: 2,
+-			},
+-			{
+-				employeeId: 398,
+-				krId: 8811,
+-				krName: 'test kr 2 3',
+-				krScore: 0,
+-				krCurrentValue: 0,
+-				krProgress: 1,
+-				krStartValue: 0,
+-				krTargetValue: 100,
+-				isSourceLinked: false,
+-				contributorCount: 0,
+-				parentId: 0,
+-				krDueDate: '2021-06-30T00:00:00',
+-				krStatusId: 2,
+-				teamId: 0,
+-				teamName: '',
+-				isAnyFeedback: false,
+-				currencyId: 0,
+-				metricId: 5,
+-				assignmentTypeId: 2,
+-			},
+-		],
+-		okrViewContributors: [
+-			{
+-				employeeId: 398,
+-				firstName: 'Rahul',
+-				lastName: 'Papnoi',
+-				designation: 'Senior Software Engineer',
+-				image:
+-					'https://d1c4w4cknd36sb.cloudfront.net/ProfileImage/8b400028-f60b-4f71-9d92-9a206d50d43d.jpg?Expires=1923804330&Signature=DiQ3-bFDeIdG-5S~18m5MfxgkFp~qfBDaACHA~aDaioJ8cGWK7mIyV~axS69~JK~CoBhDHQJ3sf2BOsQUy~EtaM9rumO2qqMwLtZoyNy~v6RmOq8AIin76~8aguQivdI7oHYgsWAQXpFJGMJbeDm~aiElI-FsQaWEyZ0tLEkTLhcbko4uvbNIqWOLPaQegvekKKn90fbrp9AtC4iyTPXocFfRO2RaylBxywfLgG~9U02J-ANDRVu~YecYKfzyoyjSx3tlY3zYu4AhcFE6uzKJVm-ZkBt0r56qfqnY84lFW89ZSgrNdq2RHfDKQyFYAywUGt4pjyPiMJTNNyZw90fvQ__&Key-Pair-Id=APKAIUVT54QRP2NDQEKQ',
+-				userType: 'Owner',
+-			},
+-		],
+-	},
+-	{
+-		employeeId: 398,
+-		owner: 398,
+-		objectiveType: 1,
+-		objectiveId: 8202,
+-		name: 'T O',
+-		teamId: 415,
+-		teamName: 'Chil1',
+-		startDate: '2021-05-30T00:00:00',
+-		dueDate: '2021-06-30T00:00:00',
+-		score: 20,
+-		cycle: 'Q2, 2021',
+-		krStatusId: 0,
+-		progress: 2,
+-		isContributorExist: true,
+-		isSourceExist: false,
+-		isPrivate: false,
+-		objectiveTypeId: 1,
+-		objectiveStatusId: 2,
+-		krCurrentValue: 0,
+-		krStartValue: 0,
+-		krTargetValue: 0,
+-		isSourceLinked: false,
+-		contributorCount: 0,
+-		parentId: 0,
+-		objectiveUniqueId: '8202',
+-		parent: '',
+-		index: 0,
+-		isAnyFeedback: false,
+-		currencyId: 0,
+-		metricId: 0,
+-		assignmentTypeId: 0,
+-		isAligned: false,
+-		okrViewKeyResults: [
+-			{
+-				employeeId: 398,
+-				krId: 8877,
+-				krName: 'T R',
+-				krScore: 20,
+-				krCurrentValue: 40,
+-				krProgress: 2,
+-				krStartValue: 0,
+-				krTargetValue: 100,
+-				isSourceLinked: false,
+-				contributorCount: 1,
+-				parentId: 0,
+-				krDueDate: '2021-06-30T00:00:00',
+-				krStatusId: 2,
+-				teamId: 415,
+-				teamName: 'Chil1',
+-				isAnyFeedback: false,
+-				currencyId: 0,
+-				metricId: 5,
+-				assignmentTypeId: 2,
+-			},
+-		],
+-		okrViewContributors: [
+-			{
+-				employeeId: 398,
+-				firstName: 'Rahul',
+-				lastName: 'Papnoi',
+-				designation: 'Senior Software Engineer',
+-				image:
+-					'https://d1c4w4cknd36sb.cloudfront.net/ProfileImage/8b400028-f60b-4f71-9d92-9a206d50d43d.jpg?Expires=1923804330&Signature=DiQ3-bFDeIdG-5S~18m5MfxgkFp~qfBDaACHA~aDaioJ8cGWK7mIyV~axS69~JK~CoBhDHQJ3sf2BOsQUy~EtaM9rumO2qqMwLtZoyNy~v6RmOq8AIin76~8aguQivdI7oHYgsWAQXpFJGMJbeDm~aiElI-FsQaWEyZ0tLEkTLhcbko4uvbNIqWOLPaQegvekKKn90fbrp9AtC4iyTPXocFfRO2RaylBxywfLgG~9U02J-ANDRVu~YecYKfzyoyjSx3tlY3zYu4AhcFE6uzKJVm-ZkBt0r56qfqnY84lFW89ZSgrNdq2RHfDKQyFYAywUGt4pjyPiMJTNNyZw90fvQ__&Key-Pair-Id=APKAIUVT54QRP2NDQEKQ',
+-				userType: 'Owner',
+-			},
+-			{
+-				employeeId: 307,
+-				firstName: 'Mayank',
+-				lastName: 'Saxena',
+-				designation: 'Team Lead',
+-				image: '',
+-				userType: '',
+-			},
+-		],
+-	},
+-	{
+-		employeeId: 307,
+-		owner: 398,
+-		objectiveType: 1,
+-		objectiveId: 8203,
+-		name: 'T O',
+-		teamId: 415,
+-		teamName: '',
+-		startDate: '2021-05-30T00:00:00',
+-		dueDate: '2021-06-30T00:00:00',
+-		score: 0,
+-		cycle: 'Q2, 2021',
+-		krStatusId: 0,
+-		progress: 1,
+-		isContributorExist: false,
+-		isSourceExist: false,
+-		isPrivate: false,
+-		objectiveTypeId: 1,
+-		objectiveStatusId: 2,
+-		krCurrentValue: 0,
+-		krStartValue: 0,
+-		krTargetValue: 0,
+-		isSourceLinked: false,
+-		contributorCount: 1,
+-		parentId: 0,
+-		objectiveUniqueId: '8203',
+-		parent: ['8202'],
+-		index: 0,
+-		isAnyFeedback: false,
+-		currencyId: 0,
+-		metricId: 0,
+-		assignmentTypeId: 0,
+-		isAligned: false,
+-		okrViewKeyResults: [
+-			{
+-				employeeId: 307,
+-				krId: 8878,
+-				krName: 'T R',
+-				krScore: 0,
+-				krCurrentValue: 0,
+-				krProgress: 1,
+-				krStartValue: 0,
+-				krTargetValue: 100,
+-				isSourceLinked: false,
+-				contributorCount: 0,
+-				parentId: 8877,
+-				krDueDate: '2021-06-30T00:00:00',
+-				krStatusId: 2,
+-				teamId: 415,
+-				teamName: null,
+-				isAnyFeedback: false,
+-				currencyId: 0,
+-				metricId: 5,
+-				assignmentTypeId: 2,
+-			},
+-		],
+-		okrViewContributors: [
+-			{
+-				employeeId: 307,
+-				firstName: 'Mayank',
+-				lastName: 'Saxena',
+-				designation: 'Team Lead',
+-				image: '',
+-				userType: 'Owner',
+-			},
+-		],
+-	},
+-	{
+-		employeeId: 307,
+-		owner: 398,
+-		objectiveType: 1,
+-		objectiveId: 8203,
+-		name: 'T O',
+-		teamId: 415,
+-		teamName: '',
+-		startDate: '2021-05-30T00:00:00',
+-		dueDate: '2021-06-30T00:00:00',
+-		score: 0,
+-		cycle: 'Q2, 2021',
+-		krStatusId: 0,
+-		progress: 1,
+-		isContributorExist: false,
+-		isSourceExist: false,
+-		isPrivate: false,
+-		objectiveTypeId: 1,
+-		objectiveStatusId: 2,
+-		krCurrentValue: 0,
+-		krStartValue: 0,
+-		krTargetValue: 0,
+-		isSourceLinked: false,
+-		contributorCount: 1,
+-		parentId: 0,
+-		objectiveUniqueId: '820332',
+-		parent: ['8202'],
+-		index: 0,
+-		isAnyFeedback: false,
+-		currencyId: 0,
+-		metricId: 0,
+-		assignmentTypeId: 0,
+-		isAligned: false,
+-		okrViewKeyResults: [
+-			{
+-				employeeId: 307,
+-				krId: 8878999,
+-				krName: 'T R',
+-				krScore: 0,
+-				krCurrentValue: 0,
+-				krProgress: 1,
+-				krStartValue: 0,
+-				krTargetValue: 100,
+-				isSourceLinked: false,
+-				contributorCount: 0,
+-				parentId: 8877,
+-				krDueDate: '2021-06-30T00:00:00',
+-				krStatusId: 2,
+-				teamId: 415,
+-				teamName: null,
+-				isAnyFeedback: false,
+-				currencyId: 0,
+-				metricId: 5,
+-				assignmentTypeId: 2,
+-			},
+-		],
+-		okrViewContributors: [
+-			{
+-				employeeId: 307,
+-				firstName: 'Mayank',
+-				lastName: 'Saxena',
+-				designation: 'Team Lead',
+-				image: '',
+-				userType: 'Owner',
+-			},
+-		],
+-	},
+-	{
+-		employeeId: 398,
+-		owner: 398,
+-		objectiveType: 1,
+-		objectiveId: 8248,
+-		name: 'New Everything',
+-		teamId: 415,
+-		teamName: 'Chil1',
+-		startDate: '2021-05-31T00:00:00',
+-		dueDate: '2021-06-30T00:00:00',
+-		score: 0,
+-		cycle: 'Q2, 2021',
+-		krStatusId: 0,
+-		progress: 1,
+-		isContributorExist: true,
+-		isSourceExist: false,
+-		isPrivate: false,
+-		objectiveTypeId: 1,
+-		objectiveStatusId: 2,
+-		krCurrentValue: 0,
+-		krStartValue: 0,
+-		krTargetValue: 0,
+-		isSourceLinked: false,
+-		contributorCount: 0,
+-		parentId: 0,
+-		objectiveUniqueId: '8248',
+-		parent: '',
+-		index: 0,
+-		isAnyFeedback: false,
+-		currencyId: 0,
+-		metricId: 0,
+-		assignmentTypeId: 0,
+-		isAligned: false,
+-		okrViewKeyResults: [
+-			{
+-				employeeId: 398,
+-				krId: 8916,
+-				krName: 'Everthing KR 1',
+-				krScore: 0,
+-				krCurrentValue: 0,
+-				krProgress: 1,
+-				krStartValue: 0,
+-				krTargetValue: 100,
+-				isSourceLinked: false,
+-				contributorCount: 1,
+-				parentId: 0,
+-				krDueDate: '2021-06-30T00:00:00',
+-				krStatusId: 2,
+-				teamId: 415,
+-				teamName: 'Chil1',
+-				isAnyFeedback: false,
+-				currencyId: 0,
+-				metricId: 5,
+-				assignmentTypeId: 2,
+-			},
+-			{
+-				employeeId: 398,
+-				krId: 8917,
+-				krName: 'Everything KR 1',
+-				krScore: 0,
+-				krCurrentValue: 0,
+-				krProgress: 1,
+-				krStartValue: 0,
+-				krTargetValue: 100,
+-				isSourceLinked: false,
+-				contributorCount: 1,
+-				parentId: 0,
+-				krDueDate: '2021-06-30T00:00:00',
+-				krStatusId: 2,
+-				teamId: 415,
+-				teamName: 'Chil1',
+-				isAnyFeedback: false,
+-				currencyId: 0,
+-				metricId: 5,
+-				assignmentTypeId: 2,
+-			},
+-		],
+-		okrViewContributors: [
+-			{
+-				employeeId: 398,
+-				firstName: 'Rahul',
+-				lastName: 'Papnoi',
+-				designation: 'Senior Software Engineer',
+-				image:
+-					'https://d1c4w4cknd36sb.cloudfront.net/ProfileImage/8b400028-f60b-4f71-9d92-9a206d50d43d.jpg?Expires=1923804330&Signature=DiQ3-bFDeIdG-5S~18m5MfxgkFp~qfBDaACHA~aDaioJ8cGWK7mIyV~axS69~JK~CoBhDHQJ3sf2BOsQUy~EtaM9rumO2qqMwLtZoyNy~v6RmOq8AIin76~8aguQivdI7oHYgsWAQXpFJGMJbeDm~aiElI-FsQaWEyZ0tLEkTLhcbko4uvbNIqWOLPaQegvekKKn90fbrp9AtC4iyTPXocFfRO2RaylBxywfLgG~9U02J-ANDRVu~YecYKfzyoyjSx3tlY3zYu4AhcFE6uzKJVm-ZkBt0r56qfqnY84lFW89ZSgrNdq2RHfDKQyFYAywUGt4pjyPiMJTNNyZw90fvQ__&Key-Pair-Id=APKAIUVT54QRP2NDQEKQ',
+-				userType: 'Owner',
+-			},
+-			{
+-				employeeId: 307,
+-				firstName: 'Mayank',
+-				lastName: 'Saxena',
+-				designation: 'Team Lead',
+-				image: '',
+-				userType: '',
+-			},
+-		],
+-	},
+-	{
+-		employeeId: 307,
+-		owner: 398,
+-		objectiveType: 1,
+-		objectiveId: 8249,
+-		name: 'New Everything',
+-		teamId: 415,
+-		teamName: '',
+-		startDate: '2021-05-31T00:00:00',
+-		dueDate: '2021-06-30T00:00:00',
+-		score: 0,
+-		cycle: 'Q2, 2021',
+-		krStatusId: 0,
+-		progress: 1,
+-		isContributorExist: false,
+-		isSourceExist: false,
+-		isPrivate: false,
+-		objectiveTypeId: 1,
+-		objectiveStatusId: 2,
+-		krCurrentValue: 0,
+-		krStartValue: 0,
+-		krTargetValue: 0,
+-		isSourceLinked: false,
+-		contributorCount: 1,
+-		parentId: 0,
+-		objectiveUniqueId: '8249',
+-		parent: ['8248', '8248'],
+-		index: 0,
+-		isAnyFeedback: false,
+-		currencyId: 0,
+-		metricId: 0,
+-		assignmentTypeId: 0,
+-		isAligned: false,
+-		okrViewKeyResults: [
+-			{
+-				employeeId: 307,
+-				krId: 8918,
+-				krName: 'Everthing KR 1',
+-				krScore: 0,
+-				krCurrentValue: 0,
+-				krProgress: 1,
+-				krStartValue: 0,
+-				krTargetValue: 100,
+-				isSourceLinked: false,
+-				contributorCount: 0,
+-				parentId: 8916,
+-				krDueDate: '2021-06-30T00:00:00',
+-				krStatusId: 2,
+-				teamId: 415,
+-				teamName: null,
+-				isAnyFeedback: false,
+-				currencyId: 0,
+-				metricId: 5,
+-				assignmentTypeId: 2,
+-			},
+-			{
+-				employeeId: 307,
+-				krId: 8919,
+-				krName: 'Everything KR 1',
+-				krScore: 0,
+-				krCurrentValue: 0,
+-				krProgress: 1,
+-				krStartValue: 0,
+-				krTargetValue: 100,
+-				isSourceLinked: false,
+-				contributorCount: 0,
+-				parentId: 8917,
+-				krDueDate: '2021-06-30T00:00:00',
+-				krStatusId: 2,
+-				teamId: 415,
+-				teamName: null,
+-				isAnyFeedback: false,
+-				currencyId: 0,
+-				metricId: 5,
+-				assignmentTypeId: 2,
+-			},
+-		],
+-		okrViewContributors: [
+-			{
+-				employeeId: 307,
+-				firstName: 'Mayank',
+-				lastName: 'Saxena',
+-				designation: 'Team Lead',
+-				image: '',
+-				userType: 'Owner',
+-			},
+-		],
+-	},
+-	{
+-		employeeId: 398,
+-		owner: 398,
+-		objectiveType: 1,
+-		objectiveId: 8280,
+-		name: "Rahul's OKR",
+-		teamId: 415,
+-		teamName: 'Chil1',
+-		startDate: '2021-06-01T00:00:00',
+-		dueDate: '2021-06-30T00:00:00',
+-		score: 0,
+-		cycle: 'Q2, 2021',
+-		krStatusId: 0,
+-		progress: 1,
+-		isContributorExist: true,
+-		isSourceExist: false,
+-		isPrivate: false,
+-		objectiveTypeId: 1,
+-		objectiveStatusId: 2,
+-		krCurrentValue: 0,
+-		krStartValue: 0,
+-		krTargetValue: 0,
+-		isSourceLinked: false,
+-		contributorCount: 0,
+-		parentId: 0,
+-		objectiveUniqueId: '8280',
+-		parent: '',
+-		index: 0,
+-		isAnyFeedback: false,
+-		currencyId: 0,
+-		metricId: 0,
+-		assignmentTypeId: 0,
+-		isAligned: false,
+-		okrViewKeyResults: [
+-			{
+-				employeeId: 398,
+-				krId: 8952,
+-				krName: "Rahul's KR",
+-				krScore: 0,
+-				krCurrentValue: 0,
+-				krProgress: 1,
+-				krStartValue: 0,
+-				krTargetValue: 100,
+-				isSourceLinked: false,
+-				contributorCount: 1,
+-				parentId: 0,
+-				krDueDate: '2021-06-30T00:00:00',
+-				krStatusId: 2,
+-				teamId: 415,
+-				teamName: 'Chil1',
+-				isAnyFeedback: false,
+-				currencyId: 0,
+-				metricId: 5,
+-				assignmentTypeId: 2,
+-			},
+-		],
+-		okrViewContributors: [
+-			{
+-				employeeId: 398,
+-				firstName: 'Rahul',
+-				lastName: 'Papnoi',
+-				designation: 'Senior Software Engineer',
+-				image:
+-					'https://d1c4w4cknd36sb.cloudfront.net/ProfileImage/8b400028-f60b-4f71-9d92-9a206d50d43d.jpg?Expires=1923804330&Signature=DiQ3-bFDeIdG-5S~18m5MfxgkFp~qfBDaACHA~aDaioJ8cGWK7mIyV~axS69~JK~CoBhDHQJ3sf2BOsQUy~EtaM9rumO2qqMwLtZoyNy~v6RmOq8AIin76~8aguQivdI7oHYgsWAQXpFJGMJbeDm~aiElI-FsQaWEyZ0tLEkTLhcbko4uvbNIqWOLPaQegvekKKn90fbrp9AtC4iyTPXocFfRO2RaylBxywfLgG~9U02J-ANDRVu~YecYKfzyoyjSx3tlY3zYu4AhcFE6uzKJVm-ZkBt0r56qfqnY84lFW89ZSgrNdq2RHfDKQyFYAywUGt4pjyPiMJTNNyZw90fvQ__&Key-Pair-Id=APKAIUVT54QRP2NDQEKQ',
+-				userType: 'Owner',
+-			},
+-			{
+-				employeeId: 307,
+-				firstName: 'Mayank',
+-				lastName: 'Saxena',
+-				designation: 'Team Lead',
+-				image: '',
+-				userType: '',
+-			},
+-		],
+-	},
+-	{
+-		employeeId: 307,
+-		owner: 398,
+-		objectiveType: 1,
+-		objectiveId: 8281,
+-		name: "Rahul's OKR",
+-		teamId: 415,
+-		teamName: '',
+-		startDate: '2021-06-01T00:00:00',
+-		dueDate: '2021-06-30T00:00:00',
+-		score: 0,
+-		cycle: 'Q2, 2021',
+-		krStatusId: 0,
+-		progress: 1,
+-		isContributorExist: false,
+-		isSourceExist: false,
+-		isPrivate: false,
+-		objectiveTypeId: 1,
+-		objectiveStatusId: 2,
+-		krCurrentValue: 0,
+-		krStartValue: 0,
+-		krTargetValue: 0,
+-		isSourceLinked: false,
+-		contributorCount: 1,
+-		parentId: 0,
+-		objectiveUniqueId: '8281',
+-		parent: ['8280'],
+-		index: 0,
+-		isAnyFeedback: false,
+-		currencyId: 0,
+-		metricId: 0,
+-		assignmentTypeId: 0,
+-		isAligned: false,
+-		okrViewKeyResults: [
+-			{
+-				employeeId: 307,
+-				krId: 8953,
+-				krName: "Rahul's KR",
+-				krScore: 0,
+-				krCurrentValue: 0,
+-				krProgress: 1,
+-				krStartValue: 0,
+-				krTargetValue: 100,
+-				isSourceLinked: false,
+-				contributorCount: 0,
+-				parentId: 8952,
+-				krDueDate: '2021-06-30T00:00:00',
+-				krStatusId: 2,
+-				teamId: 415,
+-				teamName: null,
+-				isAnyFeedback: false,
+-				currencyId: 0,
+-				metricId: 5,
+-				assignmentTypeId: 2,
+-			},
+-		],
+-		okrViewContributors: [
+-			{
+-				employeeId: 307,
+-				firstName: 'Mayank',
+-				lastName: 'Saxena',
+-				designation: 'Team Lead',
+-				image: '',
+-				userType: 'Owner',
+-			},
+-		],
+-	},
+-	{
+-		employeeId: 398,
+-		owner: 656,
+-		objectiveType: 1,
+-		objectiveId: 8326,
+-		name: 'Alignment Obj 101',
+-		teamId: 0,
+-		teamName: '',
+-		startDate: '2021-06-01T00:00:00',
+-		dueDate: '2021-07-11T00:00:00',
+-		score: 0,
+-		cycle: 'Q2, 2021',
+-		krStatusId: 0,
+-		progress: 1,
+-		isContributorExist: false,
+-		isSourceExist: false,
+-		isPrivate: false,
+-		objectiveTypeId: 2,
+-		objectiveStatusId: 2,
+-		krCurrentValue: 0,
+-		krStartValue: 0,
+-		krTargetValue: 0,
+-		isSourceLinked: false,
+-		contributorCount: 0,
+-		parentId: 0,
+-		objectiveUniqueId: '8326',
+-		parent: ['8325'],
+-		index: 0,
+-		isAnyFeedback: false,
+-		currencyId: 0,
+-		metricId: 0,
+-		assignmentTypeId: 0,
+-		isAligned: false,
+-		okrViewKeyResults: [
+-			{
+-				employeeId: 398,
+-				krId: 8975,
+-				krName: 'A Obj KR 1',
+-				krScore: 0,
+-				krCurrentValue: 10,
+-				krProgress: 1,
+-				krStartValue: 10,
+-				krTargetValue: 20,
+-				isSourceLinked: true,
+-				contributorCount: 1,
+-				parentId: 8973,
+-				krDueDate: '2021-07-11T00:00:00',
+-				krStatusId: 2,
+-				teamId: 0,
+-				teamName: '',
+-				isAnyFeedback: false,
+-				currencyId: 0,
+-				metricId: 3,
+-				assignmentTypeId: 2,
+-			},
+-		],
+-		okrViewContributors: [
+-			{
+-				employeeId: 398,
+-				firstName: 'Rahul',
+-				lastName: 'Papnoi',
+-				designation: 'Senior Software Engineer',
+-				image:
+-					'https://d1c4w4cknd36sb.cloudfront.net/ProfileImage/8b400028-f60b-4f71-9d92-9a206d50d43d.jpg?Expires=1923804330&Signature=DiQ3-bFDeIdG-5S~18m5MfxgkFp~qfBDaACHA~aDaioJ8cGWK7mIyV~axS69~JK~CoBhDHQJ3sf2BOsQUy~EtaM9rumO2qqMwLtZoyNy~v6RmOq8AIin76~8aguQivdI7oHYgsWAQXpFJGMJbeDm~aiElI-FsQaWEyZ0tLEkTLhcbko4uvbNIqWOLPaQegvekKKn90fbrp9AtC4iyTPXocFfRO2RaylBxywfLgG~9U02J-ANDRVu~YecYKfzyoyjSx3tlY3zYu4AhcFE6uzKJVm-ZkBt0r56qfqnY84lFW89ZSgrNdq2RHfDKQyFYAywUGt4pjyPiMJTNNyZw90fvQ__&Key-Pair-Id=APKAIUVT54QRP2NDQEKQ',
+-				userType: 'Owner',
+-			},
+-		],
+-	},
+-	{
+-		employeeId: 656,
+-		owner: 656,
+-		objectiveType: 1,
+-		objectiveId: 8325,
+-		name: 'Alignment Obj 1',
+-		teamId: 0,
+-		teamName: '',
+-		startDate: '2021-06-01T00:00:00',
+-		dueDate: '2021-07-11T00:00:00',
+-		score: 0,
+-		cycle: 'Q2, 2021',
+-		krStatusId: 0,
+-		progress: 1,
+-		isContributorExist: true,
+-		isSourceExist: false,
+-		isPrivate: false,
+-		objectiveTypeId: 2,
+-		objectiveStatusId: 2,
+-		krCurrentValue: 0,
+-		krStartValue: 0,
+-		krTargetValue: 0,
+-		isSourceLinked: false,
+-		contributorCount: 2,
+-		parentId: 0,
+-		objectiveUniqueId: '8325',
+-		parent: '',
+-		index: 0,
+-		isAnyFeedback: false,
+-		currencyId: 0,
+-		metricId: 0,
+-		assignmentTypeId: 0,
+-		isAligned: false,
+-		okrViewKeyResults: [
+-			{
+-				employeeId: 656,
+-				krId: 8973,
+-				krName: 'A Obj KR 1',
+-				krScore: 0,
+-				krCurrentValue: 10,
+-				krProgress: 1,
+-				krStartValue: 10,
+-				krTargetValue: 20,
+-				isSourceLinked: false,
+-				contributorCount: 0,
+-				parentId: 0,
+-				krDueDate: '2021-07-11T00:00:00',
+-				krStatusId: 2,
+-				teamId: 0,
+-				teamName: null,
+-				isAnyFeedback: false,
+-				currencyId: 0,
+-				metricId: 3,
+-				assignmentTypeId: 2,
+-			},
+-			{
+-				employeeId: 656,
+-				krId: 8974,
+-				krName: 'A Obj KR 2',
+-				krScore: 0,
+-				krCurrentValue: 30,
+-				krProgress: 1,
+-				krStartValue: 30,
+-				krTargetValue: 60,
+-				isSourceLinked: false,
+-				contributorCount: 0,
+-				parentId: 0,
+-				krDueDate: '2021-07-11T00:00:00',
+-				krStatusId: 2,
+-				teamId: 0,
+-				teamName: null,
+-				isAnyFeedback: false,
+-				currencyId: 0,
+-				metricId: 1,
+-				assignmentTypeId: 2,
+-			},
+-		],
+-		okrViewContributors: [
+-			{
+-				employeeId: 656,
+-				firstName: 'Alka',
+-				lastName: 'Bharti',
+-				designation: 'Senior QA Engineer',
+-				image:
+-					'https://d1c4w4cknd36sb.cloudfront.net/ProfileImage/3a0371ea-1310-48ba-9019-6c276b65aec1.jpg?Expires=1923743976&Signature=H39eka1gfwGUGNr4i6tbgqI89lXnpxspJ9pIz0zFk5FWAfKMwqPaQ75RcsuDSM7to-M6PV6KnJwvdFd66ZWLqKkWXavd275dVfBPGzWYU8Debdk2sD5ggNMpUzziHAP9i3er4JvkFE4eOkV3OwHsGNL-TqOxCHNF5U-CeBJl-rp9icff27-GaMaRCIWI3XNPUJkxSAytn7F479QeW7IxWALEWV6U5-ujyJSx7x9wGp52j0wG5wBLJDwdNXwIxJm-TVhv6jWrHqqG-s7BGsEaQuV5T5yi9thhM32d0rc2ynFtBOk5151t~tyVvusLh1SoPyMHoY09pZz~9UVPFAtUUQ__&Key-Pair-Id=APKAIUVT54QRP2NDQEKQ',
+-				userType: 'Owner',
+-			},
+-			{
+-				employeeId: 398,
+-				firstName: 'Rahul',
+-				lastName: 'Papnoi',
+-				designation: 'Senior Software Engineer',
+-				image:
+-					'https://d1c4w4cknd36sb.cloudfront.net/ProfileImage/8b400028-f60b-4f71-9d92-9a206d50d43d.jpg?Expires=1923804330&Signature=DiQ3-bFDeIdG-5S~18m5MfxgkFp~qfBDaACHA~aDaioJ8cGWK7mIyV~axS69~JK~CoBhDHQJ3sf2BOsQUy~EtaM9rumO2qqMwLtZoyNy~v6RmOq8AIin76~8aguQivdI7oHYgsWAQXpFJGMJbeDm~aiElI-FsQaWEyZ0tLEkTLhcbko4uvbNIqWOLPaQegvekKKn90fbrp9AtC4iyTPXocFfRO2RaylBxywfLgG~9U02J-ANDRVu~YecYKfzyoyjSx3tlY3zYu4AhcFE6uzKJVm-ZkBt0r56qfqnY84lFW89ZSgrNdq2RHfDKQyFYAywUGt4pjyPiMJTNNyZw90fvQ__&Key-Pair-Id=APKAIUVT54QRP2NDQEKQ',
+-				userType: '',
+-			},
+-		],
+-	},
+-	{
+-		employeeId: 398,
+-		owner: 1499,
+-		objectiveType: 1,
+-		objectiveId: 8477,
+-		name: 'Test OKR',
+-		teamId: 393,
+-		teamName: 'Unlock OKR Team',
+-		startDate: '2021-05-27T00:00:00',
+-		dueDate: '2021-06-30T00:00:00',
+-		score: 0,
+-		cycle: 'Q2, 2021',
+-		krStatusId: 0,
+-		progress: 1,
+-		isContributorExist: false,
+-		isSourceExist: false,
+-		isPrivate: false,
+-		objectiveTypeId: 1,
+-		objectiveStatusId: 2,
+-		krCurrentValue: 0,
+-		krStartValue: 0,
+-		krTargetValue: 0,
+-		isSourceLinked: false,
+-		contributorCount: 0,
+-		parentId: 0,
+-		objectiveUniqueId: '8477',
+-		parent: ['8177'],
+-		index: 0,
+-		isAnyFeedback: false,
+-		currencyId: 0,
+-		metricId: 0,
+-		assignmentTypeId: 0,
+-		isAligned: false,
+-		okrViewKeyResults: [
+-			{
+-				employeeId: 398,
+-				krId: 9080,
+-				krName: 'Test KR',
+-				krScore: 0,
+-				krCurrentValue: 0,
+-				krProgress: 1,
+-				krStartValue: 0,
+-				krTargetValue: 100,
+-				isSourceLinked: true,
+-				contributorCount: 1,
+-				parentId: 8868,
+-				krDueDate: '2021-06-30T00:00:00',
+-				krStatusId: 1,
+-				teamId: 393,
+-				teamName: 'Unlock OKR Team',
+-				isAnyFeedback: false,
+-				currencyId: 0,
+-				metricId: 5,
+-				assignmentTypeId: 2,
+-			},
+-		],
+-		okrViewContributors: [
+-			{
+-				employeeId: 398,
+-				firstName: 'Rahul',
+-				lastName: 'Papnoi',
+-				designation: 'Senior Software Engineer',
+-				image:
+-					'https://d1c4w4cknd36sb.cloudfront.net/ProfileImage/8b400028-f60b-4f71-9d92-9a206d50d43d.jpg?Expires=1923804330&Signature=DiQ3-bFDeIdG-5S~18m5MfxgkFp~qfBDaACHA~aDaioJ8cGWK7mIyV~axS69~JK~CoBhDHQJ3sf2BOsQUy~EtaM9rumO2qqMwLtZoyNy~v6RmOq8AIin76~8aguQivdI7oHYgsWAQXpFJGMJbeDm~aiElI-FsQaWEyZ0tLEkTLhcbko4uvbNIqWOLPaQegvekKKn90fbrp9AtC4iyTPXocFfRO2RaylBxywfLgG~9U02J-ANDRVu~YecYKfzyoyjSx3tlY3zYu4AhcFE6uzKJVm-ZkBt0r56qfqnY84lFW89ZSgrNdq2RHfDKQyFYAywUGt4pjyPiMJTNNyZw90fvQ__&Key-Pair-Id=APKAIUVT54QRP2NDQEKQ',
+-				userType: 'Owner',
+-			},
+-		],
+-	},
+-	{
+-		employeeId: 1499,
+-		owner: 1499,
+-		objectiveType: 1,
+-		objectiveId: 8177,
+-		name: 'Test OKR',
+-		teamId: 393,
+-		teamName: '',
+-		startDate: '2021-05-27T00:00:00',
+-		dueDate: '2021-06-30T00:00:00',
+-		score: 0,
+-		cycle: 'Q2, 2021',
+-		krStatusId: 0,
+-		progress: 1,
+-		isContributorExist: true,
+-		isSourceExist: false,
+-		isPrivate: false,
+-		objectiveTypeId: 1,
+-		objectiveStatusId: 2,
+-		krCurrentValue: 0,
+-		krStartValue: 0,
+-		krTargetValue: 0,
+-		isSourceLinked: false,
+-		contributorCount: 2,
+-		parentId: 0,
+-		objectiveUniqueId: '8177',
+-		parent: '',
+-		index: 0,
+-		isAnyFeedback: false,
+-		currencyId: 0,
+-		metricId: 0,
+-		assignmentTypeId: 0,
+-		isAligned: false,
+-		okrViewKeyResults: [
+-			{
+-				employeeId: 1499,
+-				krId: 8868,
+-				krName: 'Test KR',
+-				krScore: 0,
+-				krCurrentValue: 0,
+-				krProgress: 1,
+-				krStartValue: 0,
+-				krTargetValue: 100,
+-				isSourceLinked: false,
+-				contributorCount: 0,
+-				parentId: 0,
+-				krDueDate: '2021-06-30T00:00:00',
+-				krStatusId: 2,
+-				teamId: 393,
+-				teamName: null,
+-				isAnyFeedback: false,
+-				currencyId: 0,
+-				metricId: 5,
+-				assignmentTypeId: 2,
+-			},
+-		],
+-		okrViewContributors: [
+-			{
+-				employeeId: 1499,
+-				firstName: 'Navin',
+-				lastName: 'Sengar',
+-				designation: 'Senior Software Engineer',
+-				image:
+-					'https://d1c4w4cknd36sb.cloudfront.net/ProfileImage/2f99770c-59fa-43eb-95f1-cc100e685271.png?Expires=1925286287&Signature=W6jX-aAnb7j0q1QvHw3jjuOkRoEh~Mx2RwhLy69JQbtjzvccM-z~LvHEOndZvdWpVEK1NytB1TBaywVumhhHgPSWPQSz0cE2uXSgc2q24C3Aj-Kja9w0DK61JzSIRUjIGwJ2erDVfx19xwwMXjIqqweA63HKt840XkjPo1YLWJsdGPtvvjuRvbahqy9xk45weP~ZhpBoDs2vdj1cvIsVlho4ftcASZgAhn~olu0inLgh7B5LsfbRQUR1ApO~utBkpUOsK5SkhDklPl00~wJzXQT1V7153FoDGfb33LmdM4QPhk2u2mtRqaXvFDPxh-AgvlPQNmhDuditQ3RYPI~3HA__&Key-Pair-Id=APKAIUVT54QRP2NDQEKQ',
+-				userType: 'Owner',
+-			},
+-			{
+-				employeeId: 794,
+-				firstName: 'Ritesh',
+-				lastName: 'Shrivastava',
+-				designation: 'Senior Web Developer',
+-				image: '',
+-				userType: '',
+-			},
+-		],
+-	},
+-	{
+-		employeeId: 398,
+-		owner: 0,
+-		objectiveType: 2,
+-		objectiveId: 8941,
+-		name: 'Ultra OKR Ultra OKR Ultra OKR',
+-		teamId: 0,
+-		teamName: '',
+-		startDate: '2021-05-11T00:00:00',
+-		dueDate: '2021-06-30T00:00:00',
+-		score: 100,
+-		cycle: 'Q2, 2021',
+-		krStatusId: 2,
+-		progress: 4,
+-		isContributorExist: false,
+-		isSourceExist: false,
+-		isPrivate: false,
+-		objectiveTypeId: 0,
+-		objectiveStatusId: 2,
+-		krCurrentValue: 100,
+-		krStartValue: 0,
+-		krTargetValue: 100,
+-		isSourceLinked: true,
+-		contributorCount: 1,
+-		parentId: 8656,
+-		objectiveUniqueId: '8941',
+-		parent: ['5512'],
+-		index: 0,
+-		isAnyFeedback: false,
+-		currencyId: 0,
+-		metricId: 5,
+-		assignmentTypeId: 1,
+-		isAligned: false,
+-		okrViewKeyResults: [],
+-		okrViewContributors: [
+-			{
+-				employeeId: 1498,
+-				firstName: 'Smrita',
+-				lastName: 'Gupta',
+-				designation: 'Senior Software Engineer',
+-				image: '',
+-				userType: 'Parent',
+-			},
+-			{
+-				employeeId: 398,
+-				firstName: 'Rahul',
+-				lastName: 'Papnoi',
+-				designation: 'Senior Software Engineer',
+-				image:
+-					'https://d1c4w4cknd36sb.cloudfront.net/ProfileImage/8b400028-f60b-4f71-9d92-9a206d50d43d.jpg?Expires=1923804330&Signature=DiQ3-bFDeIdG-5S~18m5MfxgkFp~qfBDaACHA~aDaioJ8cGWK7mIyV~axS69~JK~CoBhDHQJ3sf2BOsQUy~EtaM9rumO2qqMwLtZoyNy~v6RmOq8AIin76~8aguQivdI7oHYgsWAQXpFJGMJbeDm~aiElI-FsQaWEyZ0tLEkTLhcbko4uvbNIqWOLPaQegvekKKn90fbrp9AtC4iyTPXocFfRO2RaylBxywfLgG~9U02J-ANDRVu~YecYKfzyoyjSx3tlY3zYu4AhcFE6uzKJVm-ZkBt0r56qfqnY84lFW89ZSgrNdq2RHfDKQyFYAywUGt4pjyPiMJTNNyZw90fvQ__&Key-Pair-Id=APKAIUVT54QRP2NDQEKQ',
+-				userType: 'Owner',
+-			},
+-		],
+-	},
+-	{
+-		employeeId: 1498,
+-		owner: 1498,
+-		objectiveType: 1,
+-		objectiveId: 5512,
+-		name: 'Alignment Map OKR',
+-		teamId: 0,
+-		teamName: '',
+-		startDate: '2021-05-04T00:00:00',
+-		dueDate: '2021-06-30T00:00:00',
+-		score: 100,
+-		cycle: 'Q2, 2021',
+-		krStatusId: 0,
+-		progress: 4,
+-		isContributorExist: true,
+-		isSourceExist: false,
+-		isPrivate: false,
+-		objectiveTypeId: 2,
+-		objectiveStatusId: 2,
+-		krCurrentValue: 0,
+-		krStartValue: 0,
+-		krTargetValue: 0,
+-		isSourceLinked: false,
+-		contributorCount: 2,
+-		parentId: 0,
+-		objectiveUniqueId: '5512',
+-		parent: '',
+-		index: 0,
+-		isAnyFeedback: true,
+-		currencyId: 0,
+-		metricId: 0,
+-		assignmentTypeId: 0,
+-		isAligned: false,
+-		okrViewKeyResults: [
+-			{
+-				employeeId: 1498,
+-				krId: 6732,
+-				krName: 'Alignment KR Alignment KR Alignment KR',
+-				krScore: 100,
+-				krCurrentValue: 100,
+-				krProgress: 4,
+-				krStartValue: 0,
+-				krTargetValue: 100,
+-				isSourceLinked: false,
+-				contributorCount: 0,
+-				parentId: 0,
+-				krDueDate: '2021-06-30T00:00:00',
+-				krStatusId: 2,
+-				teamId: 0,
+-				teamName: null,
+-				isAnyFeedback: false,
+-				currencyId: 0,
+-				metricId: 5,
+-				assignmentTypeId: 2,
+-			},
+-			{
+-				employeeId: 1498,
+-				krId: 8656,
+-				krName: 'Ultra OKR Ultra OKR Ultra OKR',
+-				krScore: 100,
+-				krCurrentValue: 100,
+-				krProgress: 4,
+-				krStartValue: 0,
+-				krTargetValue: 100,
+-				isSourceLinked: false,
+-				contributorCount: 0,
+-				parentId: 0,
+-				krDueDate: '2021-06-30T00:00:00',
+-				krStatusId: 2,
+-				teamId: 0,
+-				teamName: null,
+-				isAnyFeedback: false,
+-				currencyId: 0,
+-				metricId: 5,
+-				assignmentTypeId: 2,
+-			},
+-		],
+-		okrViewContributors: [
+-			{
+-				employeeId: 1498,
+-				firstName: 'Smrita',
+-				lastName: 'Gupta',
+-				designation: 'Senior Software Engineer',
+-				image: '',
+-				userType: 'Owner',
+-			},
+-			{
+-				employeeId: 398,
+-				firstName: 'Rahul',
+-				lastName: 'Papnoi',
+-				designation: 'Senior Software Engineer',
+-				image:
+-					'https://d1c4w4cknd36sb.cloudfront.net/ProfileImage/8b400028-f60b-4f71-9d92-9a206d50d43d.jpg?Expires=1923804330&Signature=DiQ3-bFDeIdG-5S~18m5MfxgkFp~qfBDaACHA~aDaioJ8cGWK7mIyV~axS69~JK~CoBhDHQJ3sf2BOsQUy~EtaM9rumO2qqMwLtZoyNy~v6RmOq8AIin76~8aguQivdI7oHYgsWAQXpFJGMJbeDm~aiElI-FsQaWEyZ0tLEkTLhcbko4uvbNIqWOLPaQegvekKKn90fbrp9AtC4iyTPXocFfRO2RaylBxywfLgG~9U02J-ANDRVu~YecYKfzyoyjSx3tlY3zYu4AhcFE6uzKJVm-ZkBt0r56qfqnY84lFW89ZSgrNdq2RHfDKQyFYAywUGt4pjyPiMJTNNyZw90fvQ__&Key-Pair-Id=APKAIUVT54QRP2NDQEKQ',
+-				userType: '',
+-			},
+-		],
+-	},
+-	{
+-		employeeId: 398,
+-		owner: 0,
+-		objectiveType: 2,
+-		objectiveId: 8942,
+-		name: 'Mew Tesr KR',
+-		teamId: 0,
+-		teamName: '',
+-		startDate: '2021-05-04T00:00:00',
+-		dueDate: '2021-06-30T00:00:00',
+-		score: 100,
+-		cycle: 'Q2, 2021',
+-		krStatusId: 2,
+-		progress: 4,
+-		isContributorExist: false,
+-		isSourceExist: false,
+-		isPrivate: false,
+-		objectiveTypeId: 0,
+-		objectiveStatusId: 2,
+-		krCurrentValue: 100,
+-		krStartValue: 0,
+-		krTargetValue: 100,
+-		isSourceLinked: true,
+-		contributorCount: 1,
+-		parentId: 6735,
+-		objectiveUniqueId: '8942',
+-		parent: ['5516'],
+-		index: 0,
+-		isAnyFeedback: false,
+-		currencyId: 0,
+-		metricId: 5,
+-		assignmentTypeId: 1,
+-		isAligned: false,
+-		okrViewKeyResults: [],
+-		okrViewContributors: [
+-			{
+-				employeeId: 1498,
+-				firstName: 'Smrita',
+-				lastName: 'Gupta',
+-				designation: 'Senior Software Engineer',
+-				image: '',
+-				userType: 'Parent',
+-			},
+-			{
+-				employeeId: 398,
+-				firstName: 'Rahul',
+-				lastName: 'Papnoi',
+-				designation: 'Senior Software Engineer',
+-				image:
+-					'https://d1c4w4cknd36sb.cloudfront.net/ProfileImage/8b400028-f60b-4f71-9d92-9a206d50d43d.jpg?Expires=1923804330&Signature=DiQ3-bFDeIdG-5S~18m5MfxgkFp~qfBDaACHA~aDaioJ8cGWK7mIyV~axS69~JK~CoBhDHQJ3sf2BOsQUy~EtaM9rumO2qqMwLtZoyNy~v6RmOq8AIin76~8aguQivdI7oHYgsWAQXpFJGMJbeDm~aiElI-FsQaWEyZ0tLEkTLhcbko4uvbNIqWOLPaQegvekKKn90fbrp9AtC4iyTPXocFfRO2RaylBxywfLgG~9U02J-ANDRVu~YecYKfzyoyjSx3tlY3zYu4AhcFE6uzKJVm-ZkBt0r56qfqnY84lFW89ZSgrNdq2RHfDKQyFYAywUGt4pjyPiMJTNNyZw90fvQ__&Key-Pair-Id=APKAIUVT54QRP2NDQEKQ',
+-				userType: 'Owner',
+-			},
+-		],
+-	},
+-	{
+-		employeeId: 1498,
+-		owner: 1498,
+-		objectiveType: 1,
+-		objectiveId: 5516,
+-		name: 'New Test Obj',
+-		teamId: 0,
+-		teamName: '',
+-		startDate: '2021-05-04T00:00:00',
+-		dueDate: '2021-06-30T00:00:00',
+-		score: 100,
+-		cycle: 'Q2, 2021',
+-		krStatusId: 0,
+-		progress: 4,
+-		isContributorExist: true,
+-		isSourceExist: false,
+-		isPrivate: false,
+-		objectiveTypeId: 2,
+-		objectiveStatusId: 2,
+-		krCurrentValue: 0,
+-		krStartValue: 0,
+-		krTargetValue: 0,
+-		isSourceLinked: false,
+-		contributorCount: 2,
+-		parentId: 0,
+-		objectiveUniqueId: '5516',
+-		parent: '',
+-		index: 0,
+-		isAnyFeedback: false,
+-		currencyId: 0,
+-		metricId: 0,
+-		assignmentTypeId: 0,
+-		isAligned: false,
+-		okrViewKeyResults: [
+-			{
+-				employeeId: 1498,
+-				krId: 6735,
+-				krName: 'Mew Tesr KR',
+-				krScore: 100,
+-				krCurrentValue: 100,
+-				krProgress: 4,
+-				krStartValue: 0,
+-				krTargetValue: 100,
+-				isSourceLinked: false,
+-				contributorCount: 0,
+-				parentId: 0,
+-				krDueDate: '2021-06-30T00:00:00',
+-				krStatusId: 2,
+-				teamId: 0,
+-				teamName: null,
+-				isAnyFeedback: false,
+-				currencyId: 0,
+-				metricId: 5,
+-				assignmentTypeId: 2,
+-			},
+-		],
+-		okrViewContributors: [
+-			{
+-				employeeId: 1498,
+-				firstName: 'Smrita',
+-				lastName: 'Gupta',
+-				designation: 'Senior Software Engineer',
+-				image: '',
+-				userType: 'Owner',
+-			},
+-			{
+-				employeeId: 398,
+-				firstName: 'Rahul',
+-				lastName: 'Papnoi',
+-				designation: 'Senior Software Engineer',
+-				image:
+-					'https://d1c4w4cknd36sb.cloudfront.net/ProfileImage/8b400028-f60b-4f71-9d92-9a206d50d43d.jpg?Expires=1923804330&Signature=DiQ3-bFDeIdG-5S~18m5MfxgkFp~qfBDaACHA~aDaioJ8cGWK7mIyV~axS69~JK~CoBhDHQJ3sf2BOsQUy~EtaM9rumO2qqMwLtZoyNy~v6RmOq8AIin76~8aguQivdI7oHYgsWAQXpFJGMJbeDm~aiElI-FsQaWEyZ0tLEkTLhcbko4uvbNIqWOLPaQegvekKKn90fbrp9AtC4iyTPXocFfRO2RaylBxywfLgG~9U02J-ANDRVu~YecYKfzyoyjSx3tlY3zYu4AhcFE6uzKJVm-ZkBt0r56qfqnY84lFW89ZSgrNdq2RHfDKQyFYAywUGt4pjyPiMJTNNyZw90fvQ__&Key-Pair-Id=APKAIUVT54QRP2NDQEKQ',
+-				userType: '',
+-			},
+-		],
+-	},
+-	{
+-		employeeId: 398,
+-		owner: 0,
+-		objectiveType: 2,
+-		objectiveId: 8943,
+-		name: 'Alignment KR Alignment KR Alignment KR',
+-		teamId: 0,
+-		teamName: '',
+-		startDate: '2021-05-04T00:00:00',
+-		dueDate: '2021-06-30T00:00:00',
+-		score: 100,
+-		cycle: 'Q2, 2021',
+-		krStatusId: 2,
+-		progress: 4,
+-		isContributorExist: false,
+-		isSourceExist: false,
+-		isPrivate: false,
+-		objectiveTypeId: 0,
+-		objectiveStatusId: 2,
+-		krCurrentValue: 100,
+-		krStartValue: 0,
+-		krTargetValue: 100,
+-		isSourceLinked: true,
+-		contributorCount: 1,
+-		parentId: 6732,
+-		objectiveUniqueId: '8943',
+-		parent: ['5512'],
+-		index: 0,
+-		isAnyFeedback: false,
+-		currencyId: 0,
+-		metricId: 5,
+-		assignmentTypeId: 1,
+-		isAligned: false,
+-		okrViewKeyResults: [],
+-		okrViewContributors: [
+-			{
+-				employeeId: 1498,
+-				firstName: 'Smrita',
+-				lastName: 'Gupta',
+-				designation: 'Senior Software Engineer',
+-				image: '',
+-				userType: 'Parent',
+-			},
+-			{
+-				employeeId: 398,
+-				firstName: 'Rahul',
+-				lastName: 'Papnoi',
+-				designation: 'Senior Software Engineer',
+-				image:
+-					'https://d1c4w4cknd36sb.cloudfront.net/ProfileImage/8b400028-f60b-4f71-9d92-9a206d50d43d.jpg?Expires=1923804330&Signature=DiQ3-bFDeIdG-5S~18m5MfxgkFp~qfBDaACHA~aDaioJ8cGWK7mIyV~axS69~JK~CoBhDHQJ3sf2BOsQUy~EtaM9rumO2qqMwLtZoyNy~v6RmOq8AIin76~8aguQivdI7oHYgsWAQXpFJGMJbeDm~aiElI-FsQaWEyZ0tLEkTLhcbko4uvbNIqWOLPaQegvekKKn90fbrp9AtC4iyTPXocFfRO2RaylBxywfLgG~9U02J-ANDRVu~YecYKfzyoyjSx3tlY3zYu4AhcFE6uzKJVm-ZkBt0r56qfqnY84lFW89ZSgrNdq2RHfDKQyFYAywUGt4pjyPiMJTNNyZw90fvQ__&Key-Pair-Id=APKAIUVT54QRP2NDQEKQ',
+-				userType: 'Owner',
+-			},
+-		],
+-	},
+-	{
+-		employeeId: 398,
+-		owner: 0,
+-		objectiveType: 2,
+-		objectiveId: 8944,
+-		name: 'For Mayank Tet KR',
+-		teamId: 0,
+-		teamName: '',
+-		startDate: '2021-05-04T00:00:00',
+-		dueDate: '2021-06-30T00:00:00',
+-		score: 100,
+-		cycle: 'Q2, 2021',
+-		krStatusId: 2,
+-		progress: 4,
+-		isContributorExist: false,
+-		isSourceExist: false,
+-		isPrivate: false,
+-		objectiveTypeId: 0,
+-		objectiveStatusId: 2,
+-		krCurrentValue: 100,
+-		krStartValue: 0,
+-		krTargetValue: 100,
+-		isSourceLinked: true,
+-		contributorCount: 1,
+-		parentId: 6739,
+-		objectiveUniqueId: '8944',
+-		parent: ['5517'],
+-		index: 0,
+-		isAnyFeedback: false,
+-		currencyId: 0,
+-		metricId: 5,
+-		assignmentTypeId: 1,
+-		isAligned: false,
+-		okrViewKeyResults: [],
+-		okrViewContributors: [
+-			{
+-				employeeId: 1498,
+-				firstName: 'Smrita',
+-				lastName: 'Gupta',
+-				designation: 'Senior Software Engineer',
+-				image: '',
+-				userType: 'Parent',
+-			},
+-			{
+-				employeeId: 398,
+-				firstName: 'Rahul',
+-				lastName: 'Papnoi',
+-				designation: 'Senior Software Engineer',
+-				image:
+-					'https://d1c4w4cknd36sb.cloudfront.net/ProfileImage/8b400028-f60b-4f71-9d92-9a206d50d43d.jpg?Expires=1923804330&Signature=DiQ3-bFDeIdG-5S~18m5MfxgkFp~qfBDaACHA~aDaioJ8cGWK7mIyV~axS69~JK~CoBhDHQJ3sf2BOsQUy~EtaM9rumO2qqMwLtZoyNy~v6RmOq8AIin76~8aguQivdI7oHYgsWAQXpFJGMJbeDm~aiElI-FsQaWEyZ0tLEkTLhcbko4uvbNIqWOLPaQegvekKKn90fbrp9AtC4iyTPXocFfRO2RaylBxywfLgG~9U02J-ANDRVu~YecYKfzyoyjSx3tlY3zYu4AhcFE6uzKJVm-ZkBt0r56qfqnY84lFW89ZSgrNdq2RHfDKQyFYAywUGt4pjyPiMJTNNyZw90fvQ__&Key-Pair-Id=APKAIUVT54QRP2NDQEKQ',
+-				userType: 'Owner',
+-			},
+-		],
+-	},
+-	{
+-		employeeId: 1498,
+-		owner: 1498,
+-		objectiveType: 1,
+-		objectiveId: 5517,
+-		name:
+-			"Lorem Ipsum is simply dummy text of the printing and typesetting industry. Lorem Ipsum has been the industry's standard dummy text ever since the 1500s, when an unknown printer took a galley of type and scrambled ",
+-		teamId: 0,
+-		teamName: '',
+-		startDate: '2021-05-04T00:00:00',
+-		dueDate: '2021-06-30T00:00:00',
+-		score: 100,
+-		cycle: 'Q2, 2021',
+-		krStatusId: 0,
+-		progress: 4,
+-		isContributorExist: true,
+-		isSourceExist: false,
+-		isPrivate: false,
+-		objectiveTypeId: 2,
+-		objectiveStatusId: 2,
+-		krCurrentValue: 0,
+-		krStartValue: 0,
+-		krTargetValue: 0,
+-		isSourceLinked: false,
+-		contributorCount: 2,
+-		parentId: 0,
+-		objectiveUniqueId: '5517',
+-		parent: '',
+-		index: 0,
+-		isAnyFeedback: false,
+-		currencyId: 0,
+-		metricId: 0,
+-		assignmentTypeId: 0,
+-		isAligned: false,
+-		okrViewKeyResults: [
+-			{
+-				employeeId: 1498,
+-				krId: 6739,
+-				krName: 'For Mayank Tet KR',
+-				krScore: 100,
+-				krCurrentValue: 100,
+-				krProgress: 4,
+-				krStartValue: 0,
+-				krTargetValue: 100,
+-				isSourceLinked: false,
+-				contributorCount: 0,
+-				parentId: 0,
+-				krDueDate: '2021-06-30T00:00:00',
+-				krStatusId: 2,
+-				teamId: 0,
+-				teamName: null,
+-				isAnyFeedback: false,
+-				currencyId: 0,
+-				metricId: 5,
+-				assignmentTypeId: 2,
+-			},
+-		],
+-		okrViewContributors: [
+-			{
+-				employeeId: 1498,
+-				firstName: 'Smrita',
+-				lastName: 'Gupta',
+-				designation: 'Senior Software Engineer',
+-				image: '',
+-				userType: 'Owner',
+-			},
+-			{
+-				employeeId: 398,
+-				firstName: 'Rahul',
+-				lastName: 'Papnoi',
+-				designation: 'Senior Software Engineer',
+-				image:
+-					'https://d1c4w4cknd36sb.cloudfront.net/ProfileImage/8b400028-f60b-4f71-9d92-9a206d50d43d.jpg?Expires=1923804330&Signature=DiQ3-bFDeIdG-5S~18m5MfxgkFp~qfBDaACHA~aDaioJ8cGWK7mIyV~axS69~JK~CoBhDHQJ3sf2BOsQUy~EtaM9rumO2qqMwLtZoyNy~v6RmOq8AIin76~8aguQivdI7oHYgsWAQXpFJGMJbeDm~aiElI-FsQaWEyZ0tLEkTLhcbko4uvbNIqWOLPaQegvekKKn90fbrp9AtC4iyTPXocFfRO2RaylBxywfLgG~9U02J-ANDRVu~YecYKfzyoyjSx3tlY3zYu4AhcFE6uzKJVm-ZkBt0r56qfqnY84lFW89ZSgrNdq2RHfDKQyFYAywUGt4pjyPiMJTNNyZw90fvQ__&Key-Pair-Id=APKAIUVT54QRP2NDQEKQ',
+-				userType: '',
+-			},
+-		],
+-	},
+-	{
+-		employeeId: 398,
+-		owner: 0,
+-		objectiveType: 2,
+-		objectiveId: 8945,
+-		name: 'Next Level KR',
+-		teamId: 0,
+-		teamName: '',
+-		startDate: '2021-05-24T00:00:00',
+-		dueDate: '2021-06-30T00:00:00',
+-		score: 30,
+-		cycle: 'Q2, 2021',
+-		krStatusId: 2,
+-		progress: 2,
+-		isContributorExist: false,
+-		isSourceExist: false,
+-		isPrivate: false,
+-		objectiveTypeId: 0,
+-		objectiveStatusId: 2,
+-		krCurrentValue: 30,
+-		krStartValue: 0,
+-		krTargetValue: 100,
+-		isSourceLinked: true,
+-		contributorCount: 1,
+-		parentId: 8815,
+-		objectiveUniqueId: '8945',
+-		parent: ['8064'],
+-		index: 0,
+-		isAnyFeedback: false,
+-		currencyId: 0,
+-		metricId: 5,
+-		assignmentTypeId: 1,
+-		isAligned: false,
+-		okrViewKeyResults: [],
+-		okrViewContributors: [
+-			{
+-				employeeId: 1498,
+-				firstName: 'Smrita',
+-				lastName: 'Gupta',
+-				designation: 'Senior Software Engineer',
+-				image: '',
+-				userType: 'Parent',
+-			},
+-			{
+-				employeeId: 398,
+-				firstName: 'Rahul',
+-				lastName: 'Papnoi',
+-				designation: 'Senior Software Engineer',
+-				image:
+-					'https://d1c4w4cknd36sb.cloudfront.net/ProfileImage/8b400028-f60b-4f71-9d92-9a206d50d43d.jpg?Expires=1923804330&Signature=DiQ3-bFDeIdG-5S~18m5MfxgkFp~qfBDaACHA~aDaioJ8cGWK7mIyV~axS69~JK~CoBhDHQJ3sf2BOsQUy~EtaM9rumO2qqMwLtZoyNy~v6RmOq8AIin76~8aguQivdI7oHYgsWAQXpFJGMJbeDm~aiElI-FsQaWEyZ0tLEkTLhcbko4uvbNIqWOLPaQegvekKKn90fbrp9AtC4iyTPXocFfRO2RaylBxywfLgG~9U02J-ANDRVu~YecYKfzyoyjSx3tlY3zYu4AhcFE6uzKJVm-ZkBt0r56qfqnY84lFW89ZSgrNdq2RHfDKQyFYAywUGt4pjyPiMJTNNyZw90fvQ__&Key-Pair-Id=APKAIUVT54QRP2NDQEKQ',
+-				userType: 'Owner',
+-			},
+-		],
+-	},
+-	{
+-		employeeId: 1498,
+-		owner: 1498,
+-		objectiveType: 1,
+-		objectiveId: 8064,
+-		name: 'Next Level OKR',
+-		teamId: 0,
+-		teamName: '',
+-		startDate: '2021-05-24T00:00:00',
+-		dueDate: '2021-06-30T00:00:00',
+-		score: 88.33,
+-		cycle: 'Q2, 2021',
+-		krStatusId: 0,
+-		progress: 4,
+-		isContributorExist: true,
+-		isSourceExist: false,
+-		isPrivate: false,
+-		objectiveTypeId: 2,
+-		objectiveStatusId: 2,
+-		krCurrentValue: 0,
+-		krStartValue: 0,
+-		krTargetValue: 0,
+-		isSourceLinked: false,
+-		contributorCount: 2,
+-		parentId: 0,
+-		objectiveUniqueId: '8064',
+-		parent: '',
+-		index: 0,
+-		isAnyFeedback: false,
+-		currencyId: 0,
+-		metricId: 0,
+-		assignmentTypeId: 0,
+-		isAligned: false,
+-		okrViewKeyResults: [
+-			{
+-				employeeId: 1498,
+-				krId: 8815,
+-				krName: 'Next Level KR',
+-				krScore: 65,
+-				krCurrentValue: 100,
+-				krProgress: 2,
+-				krStartValue: 0,
+-				krTargetValue: 100,
+-				isSourceLinked: false,
+-				contributorCount: 0,
+-				parentId: 0,
+-				krDueDate: '2021-06-30T00:00:00',
+-				krStatusId: 2,
+-				teamId: 0,
+-				teamName: null,
+-				isAnyFeedback: false,
+-				currencyId: 0,
+-				metricId: 5,
+-				assignmentTypeId: 2,
+-			},
+-			{
+-				employeeId: 1498,
+-				krId: 8816,
+-				krName: 'teat kr',
+-				krScore: 100,
+-				krCurrentValue: 100,
+-				krProgress: 1,
+-				krStartValue: 0,
+-				krTargetValue: 100,
+-				isSourceLinked: false,
+-				contributorCount: 0,
+-				parentId: 0,
+-				krDueDate: '2021-06-30T00:00:00',
+-				krStatusId: 2,
+-				teamId: 0,
+-				teamName: null,
+-				isAnyFeedback: false,
+-				currencyId: 0,
+-				metricId: 5,
+-				assignmentTypeId: 2,
+-			},
+-			{
+-				employeeId: 1498,
+-				krId: 8817,
+-				krName: 'test hr',
+-				krScore: 100,
+-				krCurrentValue: 100,
+-				krProgress: 1,
+-				krStartValue: 0,
+-				krTargetValue: 100,
+-				isSourceLinked: false,
+-				contributorCount: 0,
+-				parentId: 0,
+-				krDueDate: '2021-06-30T00:00:00',
+-				krStatusId: 2,
+-				teamId: 0,
+-				teamName: null,
+-				isAnyFeedback: false,
+-				currencyId: 0,
+-				metricId: 5,
+-				assignmentTypeId: 2,
+-			},
+-		],
+-		okrViewContributors: [
+-			{
+-				employeeId: 1498,
+-				firstName: 'Smrita',
+-				lastName: 'Gupta',
+-				designation: 'Senior Software Engineer',
+-				image: '',
+-				userType: 'Owner',
+-			},
+-			{
+-				employeeId: 398,
+-				firstName: 'Rahul',
+-				lastName: 'Papnoi',
+-				designation: 'Senior Software Engineer',
+-				image:
+-					'https://d1c4w4cknd36sb.cloudfront.net/ProfileImage/8b400028-f60b-4f71-9d92-9a206d50d43d.jpg?Expires=1923804330&Signature=DiQ3-bFDeIdG-5S~18m5MfxgkFp~qfBDaACHA~aDaioJ8cGWK7mIyV~axS69~JK~CoBhDHQJ3sf2BOsQUy~EtaM9rumO2qqMwLtZoyNy~v6RmOq8AIin76~8aguQivdI7oHYgsWAQXpFJGMJbeDm~aiElI-FsQaWEyZ0tLEkTLhcbko4uvbNIqWOLPaQegvekKKn90fbrp9AtC4iyTPXocFfRO2RaylBxywfLgG~9U02J-ANDRVu~YecYKfzyoyjSx3tlY3zYu4AhcFE6uzKJVm-ZkBt0r56qfqnY84lFW89ZSgrNdq2RHfDKQyFYAywUGt4pjyPiMJTNNyZw90fvQ__&Key-Pair-Id=APKAIUVT54QRP2NDQEKQ',
+-				userType: '',
+-			},
+-		],
+-	},
++    {
++        "employeeId": 1499,
++        "owner": 1499,
++        "objectiveType": 1,
++        "objectiveId": 900,
++        "name": "Test OKR",
++        "teamId": 393,
++        "teamName": "",
++        "startDate": "2021-05-27T00:00:00",
++        "dueDate": "2021-06-30T00:00:00",
++        "score": 0,
++        "cycle": "Q2, 2021",
++        "krStatusId": 0,
++        "progress": 1,
++        "isContributorExist": true,
++        "isSourceExist": false,
++        "isPrivate": false,
++        "objectiveTypeId": 1,
++        "objectiveStatusId": 2,
++        "krCurrentValue": 0,
++        "krStartValue": 0,
++        "krTargetValue": 0,
++        "isSourceLinked": false,
++        "contributorCount": 2,
++        "parentId": 0,
++        "objectiveUniqueId": "900",
++        "parent": "",
++        "index": 0,
++        "isAnyFeedback": false,
++        "currencyId": 0,
++        "metricId": 0,
++        "assignmentTypeId": 0,
++        "isAligned": false,
++        "isMyOkr": false,
++        "krParentId": 0,
++        "okrViewKeyResults": [
++            {
++                "employeeId": 1499,
++                "krId": 910,
++                "krName": "Test In-Out KR",
++                "krScore": 0,
++                "krCurrentValue": 0,
++                "krProgress": 1,
++                "krStartValue": 0,
++                "krTargetValue": 100,
++                "isSourceLinked": false,
++                "contributorCount": 0,
++                "parentId": 0,
++                "krDueDate": "2021-06-30T00:00:00",
++                "krStatusId": 2,
++                "teamId": 393,
++                "teamName": null,
++                "isAnyFeedback": false,
++                "currencyId": 0,
++                "metricId": 5,
++                "assignmentTypeId": 2,                                
++                "inValue": "$30k",
++                "outValue": "$16k"
++            }
++        ],
++        "okrViewContributors": [
++
++        ]
++    },
++    {
++        "employeeId": 1499,
++        "owner": 1499,
++        "objectiveType": 1,
++        "objectiveId": 1000,
++        "name": "Test OKR",
++        "teamId": 393,
++        "teamName": "",
++        "startDate": "2021-05-27T00:00:00",
++        "dueDate": "2021-06-30T00:00:00",
++        "score": 0,
++        "cycle": "Q2, 2021",
++        "krStatusId": 0,
++        "progress": 1,
++        "isContributorExist": true,
++        "isSourceExist": false,
++        "isPrivate": false,
++        "objectiveTypeId": 1,
++        "objectiveStatusId": 2,
++        "krCurrentValue": 0,
++        "krStartValue": 0,
++        "krTargetValue": 0,
++        "isSourceLinked": false,
++        "contributorCount": 2,
++        "parentId": 0,
++        "objectiveUniqueId": "1000",
++        "parent": [
++            900
++        ],
++        "index": 0,
++        "isAnyFeedback": false,
++        "currencyId": 0,
++        "metricId": 0,
++        "assignmentTypeId": 0,
++        "isAligned": false,
++        "isMyOkr": false,
++        "krParentId": 0,
++        "okrViewKeyResults": [
++            {
++                "employeeId": 1499,
++                "krId": 1100,
++                "krName": "Test In KR",
++                "krScore": 0,
++                "krCurrentValue": 0,
++                "krProgress": 1,
++                "krStartValue": 0,
++                "krTargetValue": 100,
++                "isSourceLinked": false,
++                "contributorCount": 0,
++                "parentId": 910,
++                "krDueDate": "2021-06-30T00:00:00",
++                "krStatusId": 2,
++                "teamId": 393,
++                "teamName": null,
++                "isAnyFeedback": false,
++                "currencyId": 0,
++                "metricId": 5,
++                "assignmentTypeId": 2,
++                "inValue": "$16k"
++            }
++        ],
++        "okrViewContributors": [
++
++        ]
++    },
++    {
++        "employeeId": 1499,
++        "owner": 1499,
++        "objectiveType": 1,
++        "objectiveId": 2000,
++        "name": "Test My OKR",
++        "teamId": 393,
++        "teamName": "",
++        "startDate": "2021-05-27T00:00:00",
++        "dueDate": "2021-06-30T00:00:00",
++        "score": 0,
++        "cycle": "Q2, 2021",
++        "krStatusId": 0,
++        "progress": 1,
++        "isContributorExist": true,
++        "isSourceExist": false,
++        "isPrivate": false,
++        "objectiveTypeId": 1,
++        "objectiveStatusId": 2,
++        "krCurrentValue": 0,
++        "krStartValue": 0,
++        "krTargetValue": 0,
++        "isSourceLinked": false,
++        "contributorCount": 2,
++        "parentId": 0,
++        "objectiveUniqueId": "2000",
++        "parent": [
++            1000
++        ],
++        "index": 0,
++        "isAnyFeedback": false,
++        "currencyId": 0,
++        "metricId": 0,
++        "assignmentTypeId": 0,
++        "isAligned": false,
++        "isMyOkr": true,
++        "krParentId": 0,
++        "okrViewKeyResults": [
++            {
++                "employeeId": 1499,
++                "krId": 2100,
++                "krName": "Test In-Out KR",
++                "krScore": 0,
++                "krCurrentValue": 0,
++                "krProgress": 1,
++                "krStartValue": 0,
++                "krTargetValue": 100,
++                "isSourceLinked": false,
++                "contributorCount": 0,
++                "parentId": 1100,
++                "krDueDate": "2021-06-30T00:00:00",
++                "krStatusId": 2,
++                "teamId": 393,
++                "teamName": null,
++                "isAnyFeedback": false,
++                "currencyId": 0,
++                "metricId": 5,
++                "assignmentTypeId": 2,                
++                "outValue": "$32k",
++                "inValue": "$18k"
++            }
++        ],
++        "okrViewContributors": [
++
++        ]
++    },
++    {
++        "employeeId": 1499,
++        "owner": 1499,
++        "objectiveType": 1,
++        "objectiveId": 3000,
++        "name": "Test OKR",
++        "teamId": 393,
++        "teamName": "",
++        "startDate": "2021-05-27T00:00:00",
++        "dueDate": "2021-06-30T00:00:00",
++        "score": 0,
++        "cycle": "Q2, 2021",
++        "krStatusId": 0,
++        "progress": 1,
++        "isContributorExist": true,
++        "isSourceExist": false,
++        "isPrivate": false,
++        "objectiveTypeId": 1,
++        "objectiveStatusId": 2,
++        "krCurrentValue": 0,
++        "krStartValue": 0,
++        "krTargetValue": 0,
++        "isSourceLinked": false,
++        "contributorCount": 2,
++        "parentId": 0,
++        "objectiveUniqueId": "3000",
++        "parent": [
++            2000
++        ],
++        "index": 0,
++        "isAnyFeedback": false,
++        "currencyId": 0,
++        "metricId": 0,
++        "assignmentTypeId": 0,
++        "isAligned": false,
++        "isMyOkr": false,
++        "krParentId": 0,
++        "okrViewKeyResults": [
++            {
++                "employeeId": 1499,
++                "krId": 3100,
++                "krName": "Test In-Out KR",
++                "krScore": 0,
++                "krCurrentValue": 0,
++                "krProgress": 1,
++                "krStartValue": 0,
++                "krTargetValue": 100,
++                "isSourceLinked": false,
++                "contributorCount": 0,
++                "parentId": 2100,
++                "krDueDate": "2021-06-30T00:00:00",
++                "krStatusId": 2,
++                "teamId": 393,
++                "teamName": null,
++                "isAnyFeedback": false,
++                "currencyId": 0,
++                "metricId": 5,
++                "assignmentTypeId": 2,
++                "inValue": '$1k',
++                "outValue": '$2k'
++            }
++        ],
++        "okrViewContributors": [
++
++        ]
++    },
++    {
++        "employeeId": 1499,
++        "owner": 1499,
++        "objectiveType": 1,
++        "objectiveId": 3001,
++        "name": "Test OKR",
++        "teamId": 393,
++        "teamName": "",
++        "startDate": "2021-05-27T00:00:00",
++        "dueDate": "2021-06-30T00:00:00",
++        "score": 0,
++        "cycle": "Q2, 2021",
++        "krStatusId": 0,
++        "progress": 1,
++        "isContributorExist": true,
++        "isSourceExist": false,
++        "isPrivate": false,
++        "objectiveTypeId": 1,
++        "objectiveStatusId": 2,
++        "krCurrentValue": 0,
++        "krStartValue": 0,
++        "krTargetValue": 0,
++        "isSourceLinked": false,
++        "contributorCount": 2,
++        "parentId": 0,
++        "objectiveUniqueId": "3001",
++        "parent": [
++            2000
++        ],
++        "index": 0,
++        "isAnyFeedback": false,
++        "currencyId": 0,
++        "metricId": 0,
++        "assignmentTypeId": 0,
++        "isAligned": false,
++        "isMyOkr": false,
++        "krParentId": 0,
++        "okrViewKeyResults": [
++            {
++                "employeeId": 1499,
++                "krId": 3101,
++                "krName": "Test KR",
++                "krScore": 0,
++                "krCurrentValue": 0,
++                "krProgress": 1,
++                "krStartValue": 0,
++                "krTargetValue": 100,
++                "isSourceLinked": false,
++                "contributorCount": 0,
++                "parentId": 2100,
++                "krDueDate": "2021-06-30T00:00:00",
++                "krStatusId": 2,
++                "teamId": 393,
++                "teamName": null,
++                "isAnyFeedback": false,
++                "currencyId": 0,
++                "metricId": 5,
++                "assignmentTypeId": 2,                
++                "inValue": '$3k',
++                "outValue": '$4k'
++            }
++        ],
++        "okrViewContributors": [
++
++        ]
++    },
++    {
++        "employeeId": 1499,
++        "owner": 1499,
++        "objectiveType": 2,
++        "objectiveId": 3002,
++        "name": "Test OKR",
++        "teamId": 393,
++        "teamName": "",
++        "startDate": "2021-05-27T00:00:00",
++        "dueDate": "2021-06-30T00:00:00",
++        "score": 0,
++        "cycle": "Q2, 2021",
++        "krStatusId": 0,
++        "progress": 1,
++        "isContributorExist": true,
++        "isSourceExist": false,
++        "isPrivate": false,
++        "objectiveTypeId": 1,
++        "objectiveStatusId": 2,
++        "krCurrentValue": 0,
++        "krStartValue": 0,
++        "krTargetValue": 0,
++        "isSourceLinked": false,
++        "contributorCount": 2,
++        "parentId": 0,
++        "objectiveUniqueId": "3002",
++        "parent": [
++            2000
++        ],
++        "index": 0,
++        "isAnyFeedback": false,
++        "currencyId": 0,
++        "metricId": 0,
++        "assignmentTypeId": 0,
++        "isAligned": false,
++        "isMyOkr": false,
++        "krParentId": 0,
++        "okrViewKeyResults": [
++
++        ],
++        "okrViewContributors": [
++
++        ]
++    },
++    {
++        "employeeId": 1499,
++        "owner": 1499,
++        "objectiveType": 2,
++        "objectiveId": 3003,
++        "name": "Test OKR",
++        "teamId": 393,
++        "teamName": "",
++        "startDate": "2021-05-27T00:00:00",
++        "dueDate": "2021-06-30T00:00:00",
++        "score": 0,
++        "cycle": "Q2, 2021",
++        "krStatusId": 0,
++        "progress": 1,
++        "isContributorExist": true,
++        "isSourceExist": false,
++        "isPrivate": false,
++        "objectiveTypeId": 1,
++        "objectiveStatusId": 2,
++        "krCurrentValue": 0,
++        "krStartValue": 0,
++        "krTargetValue": 0,
++        "isSourceLinked": false,
++        "contributorCount": 2,
++        "parentId": 0,
++        "objectiveUniqueId": "3003",
++        "parent": [
++            2000
++        ],
++        "index": 0,
++        "isAnyFeedback": false,
++        "currencyId": 0,
++        "metricId": 0,
++        "assignmentTypeId": 0,
++        "isAligned": false,
++        "isMyOkr": false,
++        "krParentId": 2100,
++        "okrViewKeyResults": [
++
++        ],
++        "okrViewContributors": [
++
++        ]
++    },
++    {
++        "employeeId": 1499,
++        "owner": 1499,
++        "objectiveType": 1,
++        "objectiveId": 4000,
++        "name": "Test OKR",
++        "teamId": 393,
++        "teamName": "",
++        "startDate": "2021-05-27T00:00:00",
++        "dueDate": "2021-06-30T00:00:00",
++        "score": 0,
++        "cycle": "Q2, 2021",
++        "krStatusId": 0,
++        "progress": 1,
++        "isContributorExist": true,
++        "isSourceExist": false,
++        "isPrivate": false,
++        "objectiveTypeId": 1,
++        "objectiveStatusId": 2,
++        "krCurrentValue": 0,
++        "krStartValue": 0,
++        "krTargetValue": 0,
++        "isSourceLinked": false,
++        "contributorCount": 2,
++        "parentId": 0,
++        "objectiveUniqueId": "4000",
++        "parent": [
++            3000
++        ],
++        "index": 0,
++        "isAnyFeedback": false,
++        "currencyId": 0,
++        "metricId": 0,
++        "assignmentTypeId": 0,
++        "isAligned": false,
++        "isMyOkr": false,
++        "krParentId": 0,
++        "okrViewKeyResults": [
++            {
++                "employeeId": 1499,
++                "krId": 4100,
++                "krName": "Test Last KR",
++                "krScore": 0,
++                "krCurrentValue": 0,
++                "krProgress": 1,
++                "krStartValue": 0,
++                "krTargetValue": 100,
++                "isSourceLinked": false,
++                "contributorCount": 0,
++                "parentId": 3100,
++                "krDueDate": "2021-06-30T00:00:00",
++                "krStatusId": 2,
++                "teamId": 393,
++                "teamName": null,
++                "isAnyFeedback": false,
++                "currencyId": 0,
++                "metricId": 5,
++                "assignmentTypeId": 2,
++                "inValue": '$0k'
++            }
++        ],
++        "okrViewContributors": [
++
++        ]
++    },
+ ];
+ 
+ export default okrJsonData;
+diff --git a/src/config/url.js b/src/config/url.js
+index c2c63deb..ec7b5b6b 100644
+--- a/src/config/url.js
++++ b/src/config/url.js
+@@ -15,4 +15,6 @@ export const Reports = 'https://okr-dev-reporting.compunnel.com/api/';
+ export const FEEDBACK_BASE_URL = 'https://feedback-api-dev.compunnel.com/api';
+ 
+ /** alignment */
+-export const AlignmentMap = 'https://okrservice-dev-alignmentmap.compunnel.com/api';
++//export const AlignmentMap = 'https://okrservice-dev-alignmentmap.compunnel.com/api';
++
++export const AlignmentMap = 'https://okrservice-dev.compunnel.com/api';
