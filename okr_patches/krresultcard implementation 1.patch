@@ -1,0 +1,1437 @@
+ .../AlignmentListing/KrResultItemCard.tsx          | 628 +++++++++++++++++++++
+ .../AlignmentListing/ObjectiveCard.tsx             |   2 +-
+ .../DiagramHelper/diagram-layout-helper.jsx        |  66 +++
+ .../DiagramHelper/diagram-okr-helper.jsx           |  11 +-
+ src/components/AlignmentMap/RelaxedMap/index.jsx   | 388 ++++++++-----
+ src/components/AlignmentMap/style.scss             | 144 +++--
+ 6 files changed, 1027 insertions(+), 212 deletions(-)
+
+diff --git a/src/components/AlignmentMap/AlignmentListing/KrResultItemCard.tsx b/src/components/AlignmentMap/AlignmentListing/KrResultItemCard.tsx
+new file mode 100644
+index 00000000..d17399ce
+--- /dev/null
++++ b/src/components/AlignmentMap/AlignmentListing/KrResultItemCard.tsx
+@@ -0,0 +1,628 @@
++import { Box, Chip, IconButton, Typography } from '@material-ui/core';
++import React, { useState, useEffect, Fragment } from 'react';
++import '../../../styles/alignmentMap.scss';
++import OKRFlag from '../../../images/okrFlag.svg';
++import { IndividualSmallIcon, LinkIcon, PrivateIcon } from '../../../config/svg/CommonSvg';
++import krFlag from '../../../images/krFlag.svg';
++import CircularProgress from '../../OkrAction/CircularProgress';
++import { UserAvatarGroup } from '../../Common/UserAvatarGroup';
++import { Enums } from '../../../config/enums';
++import { getMonthDate, getRandomBackgroundColor, getRandomColor } from '../../../config/utils';
++import { OKRButton } from '../../Common/OKRButton';
++import { SettingsIcon } from '../../../config/svg/MyGoalSvg';
++import { RightArrowIcon } from '../../../config/svg/ArrowSvg';
++import { OkrPopperMenu } from '../../OkrAction/OkrPopperMenu';
++import { GoalAttributes } from './GoalAttributes';
++import { getDifferenceBetweenDates } from '../../../config/utils';
++import { OkrProgressBar } from '../../OkrAction/OkrProgressBar';
++import moment from 'moment';
++import { getLocalStorageItem } from '../../../services/StorageService';
++import AlertDialog from '../../Common/Dialog';
++import { ListTooltip } from '../../OkrAction/ListTooltip';
++import { DiagramJsonHelper } from '../RelaxedMap/DiagramHelper/diagram-json-helper';
++
++export interface RelaxedCardProps { }
++
++const KrResultItemCard: React.FC<any> = (props: any) => {
++	const {
++		t,
++		currentUser,
++		data,
++		currentCycleEndDate,
++		handleDeleteOkr,
++		setOpenDrawer,
++		goalDetailObject,
++		keyDetailObject,
++		setModalProps,
++		goalDetail,
++		setGoalDetail,
++		fetchOkr,
++		listOkrResult,
++		krItemId
++	} = props;
++	const okr = data.data;
++	const getKrItem = (okrObj: any, krId: string): any => {
++		if (okrObj && okrObj.okrViewKeyResults && okrObj.okrViewKeyResults.length > 0) {
++			return okrObj.okrViewKeyResults.find((kr: any) => kr[DiagramJsonHelper.bindProps.krId] === krId);
++		}
++		return null;
++	}
++	const krItem = getKrItem(okr, krItemId);
++	const [openObjectAttribute, setOpenObjectAttribute] = useState(false);
++	const [showKr, setShowKr] = useState(false);
++	const [modalPropsKR, setmodalPropsKR] = useState<any>({ open: false, type: '', message: '' });
++
++	const [objectiveDetail, setObjectiveDetail] = useState<any>({
++		...goalDetailObject,
++		myGoalsDetails: [{ ...keyDetailObject }],
++	});
++	const defaultKRDateError = { error: '', helperText: '', type: '' };
++	const [krAttrDateError, setKRAttrDateError] = useState<any>(defaultKRDateError);
++
++	const defaultGaolDateError = { error: '', helperText: '', type: '' };
++	const [isSaveDisabled, setIsSaveDisabled] = useState<Boolean>(true);
++	const [goalsAttribute, setGoalsAttribute] = useState<any>({});
++	const [loader, setLoader] = useState<Boolean>(false);
++	const [goalAttrDateError, setGaolAttrDateError] = useState<any>(defaultGaolDateError);
++	const [snackbarProps, setSnackbarProps] = useState<any>({});
++	const [keyAttribute, setKeyAttribute] = useState<any>({});
++	const [keyRes, setKeyRes] = useState<boolean>(false);
++	const [dataUpdated, setdataUpdated] = useState<any>({});
++
++	const year = getLocalStorageItem('currentYear');
++	const [krLoader, setKrLoader] = useState<Boolean>(false);
++	const [keyData, setKeyData] = useState<any>({});
++	const userDetail: any = JSON.parse(getLocalStorageItem('userDetail') || '{}');
++
++
++	const handleKRClick = async (krObj: any, okrObj: any) => {
++		let okrs = JSON.parse(JSON.stringify(listOkrResult));
++		let currentORK = okrs.myGoalOkrResponses.filter((item: any) => item.goalObjectiveId === okrObj.objectiveId);
++		let getKR = currentORK[0].myGoalsDetails.filter((kr: any) => kr.goalKeyId === krObj.krId);
++		let obj = {
++			kr: getKR[0],
++			okr: currentORK[0],
++			actionType: 'editKR',
++			goalDetail: {},
++			showAttributeDrawer: true,
++		};
++		getKR[0] = {
++			...getKR[0],
++			contributors: getKR[0].contributors.filter(
++				(item: any) => !item.isSource && item.employeeId !== userDetail.employeeId
++			),
++		};
++		setKeyRes(true);
++		setKeyAttribute(getKR[0]);
++		setdataUpdated(obj);
++	};
++
++	const validateAddKRForm = (formData: any) => {
++		if (formData?.metricId === Enums.ONE || formData?.metricId === Enums.TWO || formData?.metricId === Enums.THREE) {
++			if (formData.startValue === formData.targetValue) {
++				setKRAttrDateError({
++					error: t('startCurrentSameError'),
++					helperText: t('startCurrentSameError'),
++					type: 'targetValue',
++				});
++				return false;
++			}
++		}
++		if (formData.keyDescription === '') {
++			setKRAttrDateError({
++				error: t('keyResultError'),
++				helperText: t('keyResultError'),
++				type: 'keyDescription',
++			});
++			return false;
++		} else if (formData.keyDescription.trim() === '') {
++			setKRAttrDateError({
++				error: t('keyResultError'),
++				helperText: t('keyResultError'),
++				type: 'keyDescription',
++			});
++			return false;
++		}
++		return true;
++	};
++
++	const updateFormDetail = (item: any, key: any, value: any, isKeyData: Boolean, keyAttribute: any) => {
++		const { myGoalsDetails } = objectiveDetail;
++		let updatedDetail = [];
++		if (isKeyData) {
++			updatedDetail = myGoalsDetails.map((element: any) => {
++				if (element.id === item.id) {
++					element.startDate = keyAttribute.startDate ? keyAttribute.startDate : element.startDate;
++					element.dueDate = keyAttribute.dueDate ? keyAttribute.dueDate : element.dueDate;
++					element.startValue = keyAttribute.startValue ? keyAttribute.startValue : element.startValue;
++					element.targetValue = keyAttribute.targetValue ? keyAttribute.targetValue : element.targetValue;
++					element.metricId = keyAttribute.metricId ? keyAttribute.metricId : element.metricId;
++					element.currencyId = keyAttribute.currencyId ? keyAttribute.currencyId : element.currencyId;
++					element.showCurrentTarget = keyAttribute.showCurrentTarget
++						? keyAttribute.showCurrentTarget
++						: element.showCurrentTarget;
++					element.metricName = keyAttribute.metricName ? keyAttribute.metricName : element.metricName;
++					element.contributors = keyAttribute.contributors ? keyAttribute.contributors : element.contributors;
++					element.keyNotes = keyAttribute.keyNotes ? keyAttribute.keyNotes : element.keyNotes;
++					element.keyDescription = keyAttribute.keyDescription ? keyAttribute.keyDescription : element.keyDescription;
++					element.isNewKey = false;
++				}
++				return element;
++			});
++		} else {
++			updatedDetail = myGoalsDetails.map((element: any) => {
++				if (element.id === item.id) {
++					if (key === 'keyDescription' || key === 'dueDate') {
++						element.isTyped = true;
++						element.isNewKey = false;
++					}
++					element[key] = value;
++				} else {
++					element.isTyped = false;
++				}
++				return element;
++			});
++		}
++
++		setObjectiveDetail({ ...objectiveDetail, isTyped: false, myGoalsDetails: updatedDetail });
++		// if (key === 'keyDescription' || key === 'dueDate') {
++		// 	getCallAutoSave({ ...objectiveDetail, isTyped: false, myGoalsDetails: updatedDetail });
++		// }
++	};
++
++	const handleDrawerClose = async (_event: any, type: String) => {
++		setShowKr(false);
++		setGaolAttrDateError(defaultGaolDateError);
++		if (type === 'save') {
++			setSnackbarProps({});
++			const datesDifferenceInDays = moment(
++				new Date(keyAttribute.startDate ? keyAttribute.startDate : keyData?.startDate || new Date())
++			).isAfter(new Date(keyAttribute.dueDate ? keyAttribute.dueDate : keyData.dueDate || new Date()), 'days');
++			if (Boolean(datesDifferenceInDays)) {
++				setGaolAttrDateError({
++					error: t('startDateDueDateError'),
++					helperText: t('startDateDueDateError'),
++					type: 'dueDate',
++				});
++			} else {
++				const { showAttributeDrawer, actionType } = dataUpdated || {};
++				if (showAttributeDrawer && actionType === 'editKR') {
++					const data = { ...keyAttribute, year };
++					if (validateAddKRForm(data)) {
++						setKrLoader(true);
++						const response = await props.updateKrAttributes(data);
++						if (response && response.data && response.data.status === 200) {
++							setSnackbarProps({ show: true, message: response?.data?.messageList?.Result, variant: 'success' });
++							setKrLoader(false);
++							setGoalDetail({});
++							setdataUpdated({});
++							setShowKr(false);
++							props.fetchOkr();
++							props.getAlignmentData();
++						} else {
++							setSnackbarProps({
++								show: true,
++								message: t('someErrorOccurred'),
++								variant: 'error',
++							});
++							setKrLoader(false);
++						}
++						setKRAttrDateError(defaultKRDateError);
++						setOpenDrawer(false);
++						setKeyAttribute({});
++					}
++				} else {
++					if (validateAddKRForm(keyAttribute)) {
++						if (showAttributeDrawer && actionType === 'addNewKr') {
++							setdataUpdated({ ...dataUpdated, kr: { ...dataUpdated.kr, ...keyAttribute }, saved: true });
++							setKRAttrDateError(defaultKRDateError);
++							setOpenDrawer(false);
++							setKeyAttribute({});
++							setShowKr(false);
++						} else {
++							updateFormDetail(keyData, '', '', true, keyAttribute);
++							setKRAttrDateError(defaultKRDateError);
++							setOpenDrawer(false);
++							setKeyAttribute({});
++							setShowKr(false);
++						}
++					}
++				}
++			}
++		} else if (type === 'close') {
++			if (!isKRAttributeUpdated()) {
++				setmodalPropsKR({
++					open: true,
++					type: 'editKR',
++					message: t('unSavedItemAlert'),
++					module: 'user',
++					details: { id: '' },
++				});
++			} else {
++				setKeyRes(false);
++				setGoalsAttribute({});
++				setOpenDrawer(false);
++			}
++		}
++	};
++
++	const isKRAttributeUpdated = () => {
++		if ((dataUpdated && dataUpdated.actionType === 'editKR') || dataUpdated.actionType === 'addNewKr') {
++			const keyDetailsRes = dataUpdated?.okr.assignmentTypeId === 1 ? dataUpdated.okr : dataUpdated.kr;
++			return checkFormValues(keyDetailsRes);
++		} else {
++			return checkFormValues(keyData);
++		}
++	};
++
++	const checkFormValues = (keyData: any) => {
++		return (keyAttribute.startDate && !getDifferenceBetweenDates(keyData.startDate, keyAttribute.startDate)) ||
++			(keyAttribute.dueDate && !getDifferenceBetweenDates(keyAttribute.dueDate, keyData.dueDate)) ||
++			(keyAttribute.metricId && keyAttribute.metricId !== keyData.metricId) ||
++			(keyAttribute.currencyId && keyAttribute.currencyId !== keyData.currencyId) ||
++			(keyAttribute.startValue && keyAttribute.startValue !== keyData.startValue) ||
++			(keyAttribute.targetValue && keyAttribute.targetValue !== keyData.targetValue) ||
++			(keyAttribute?.keyNotes && keyAttribute?.keyNotes !== keyData.keyNotes) ||
++			(keyAttribute?.keyDescription && keyAttribute?.keyDescription !== keyData.keyDescription) ||
++			(keyAttribute.contributors && keyAttribute.contributors.length !== keyData.contributors.length - 1)
++			? false
++			: true;
++	};
++
++	/* useEffect(() => {
++		setShowKr(false);
++		const { showAttributeDrawer, actionType, okr } = goalDetail || {};
++		
++		console.log('updated goal details', goalDetail, openObjectAttribute, actionType)
++		if (showAttributeDrawer && actionType === 'editGoal') {
++			// setGoalsAttribute(okr);
++			// setOpenDrawer(true);
++			setOpenObjectAttribute(true);
++		} 
++		// else if (openObjectAttribute && (actionType === 'editKr' || actionType === 'addNewKr')) {
++		// 	setObjectiveDetail(okr);
++		// 	setShowKr(true);
++		// }
++	
++		return () => {
++			setShowKr(false);
++		};
++	}, [goalDetail]); */
++
++	const handleCloseObjectiveAttribute = async (event: any, type: String) => {
++		setShowKr(false);
++		setGaolAttrDateError(defaultGaolDateError);
++		if (type === 'save') {
++			setSnackbarProps({});
++			const datesDifferenceInDays = moment(
++				new Date(goalsAttribute.startDate ? goalsAttribute.startDate : objectiveDetail.startDate || new Date())
++			).isAfter(
++				new Date(goalsAttribute.endDate ? goalsAttribute.endDate : objectiveDetail.endDate || new Date()),
++				'days'
++			);
++			if (Boolean(datesDifferenceInDays)) {
++				setGaolAttrDateError({
++					error: t('startDateDueDateError'),
++					helperText: t('startDateDueDateError'),
++					type: 'dueDate',
++				});
++			} else {
++				if (goalDetail && goalDetail.showAttributeDrawer && goalDetail.actionType === 'editGoal') {
++					if (validGoalAttributeAlignmentForm(goalsAttribute)) {
++						setKrLoader(true);
++						const data = { ...goalsAttribute };
++						const response = await props.updateGoalAttributes(data);
++						if (response && response.data && response.data.status === 200) {
++							setSnackbarProps({ show: true, message: response?.data?.messageList?.Result, variant: 'success' });
++							setKrLoader(false);
++							setIsSaveDisabled(true);
++							setGaolAttrDateError(defaultGaolDateError);
++							// setOpenDrawer(false);
++							setOpenObjectAttribute(false);
++							setGoalsAttribute({});
++							// setGoalDetail({});
++							setdataUpdated({});
++							fetchOkr();
++							props.getAlignmentData();
++						}
++					}
++				} else {
++					if (validGoalAttributeAlignmentForm(goalsAttribute)) {
++						if (goalsAttribute.teamOkrRequests?.length > 0) {
++							objectiveDetail.goalTypeId = 1;
++						}
++						setObjectiveDetail({
++							...objectiveDetail,
++							objectiveName: goalsAttribute.objectiveName
++								? goalsAttribute.objectiveName
++								: objectiveDetail.objectiveName,
++							isPrivate:
++								goalsAttribute.isPrivate === false
++									? goalsAttribute.isPrivate
++									: objectiveDetail.isPrivate
++										? objectiveDetail.isPrivate
++										: goalsAttribute.isPrivate,
++							objectiveDescription: goalsAttribute.objectiveDescription
++								? goalsAttribute.objectiveDescription
++								: objectiveDetail.objectiveDescription,
++							startDate: goalsAttribute.startDate ? goalsAttribute.startDate : objectiveDetail.startDate,
++							endDate: goalsAttribute.endDate ? goalsAttribute.endDate : objectiveDetail.endDate,
++							myGoalsDetails: goalsAttribute.myGoalsDetails
++								? goalsAttribute.myGoalsDetails
++								: objectiveDetail.myGoalsDetails,
++							teamOkrRequests: goalsAttribute.teamOkrRequests
++								? goalsAttribute.teamOkrRequests
++								: objectiveDetail.teamOkrRequests,
++						});
++						setIsSaveDisabled(true);
++						setGaolAttrDateError(defaultGaolDateError);
++						setOpenObjectAttribute(false);
++						setGoalsAttribute({});
++					}
++				}
++			}
++		} else if (type === 'close') {
++			setShowKr(false);
++			setGoalDetail({});
++			if (!isGoalAttributeUpdated()) {
++				setModalProps({
++					open: true,
++					type: 'GoalAttr',
++					message: t('unSavedItemAlert'),
++					module: 'user',
++					details: { id: '' },
++				});
++			} else {
++				setGoalsAttribute({});
++				setOpenDrawer(false);
++				setOpenDrawer(false);
++			}
++		}
++	};
++
++	const validGoalAttributeAlignmentForm = (formAlignData: any) => {
++		if (!formAlignData.objectiveName) {
++			setGaolAttrDateError({
++				helperText: t('objectiveNameError'),
++				type: 'objectiveName',
++				error: t('objectiveNameError'),
++			});
++			return false;
++		} else if (formAlignData.objectiveName?.trim() === '') {
++			setGaolAttrDateError({
++				type: 'objectiveName',
++				helperText: t('objectiveNameError'),
++				error: t('objectiveNameError'),
++			});
++			return false;
++		}
++		return true;
++	};
++
++	const handleKebabClick = (kr: any, type: any) => {
++		// let krDlt = okr.filter((item:any ) => item.goalObjectiveId)
++		if (type === 2) {
++			setKeyData(okr);
++		} else if (type === 4) {
++			setKeyData(kr);
++		}
++	};
++
++	useEffect(() => {
++		setGoalsAttribute(okr);
++		// setGoalDetail({ ...goalDetail, actionType: 'editGoal', showAttributeDrawer: true });
++	}, []);
++
++	const isGoalAttributeUpdated = () => {
++		return objectiveDetail &&
++			!isSaveDisabled &&
++			((goalsAttribute.objectiveDescription &&
++				objectiveDetail.objectiveDescription !== goalsAttribute.objectiveDescription) ||
++				objectiveDetail.name !== goalsAttribute.name ||
++				objectiveDetail.isPrivate !== goalsAttribute?.isPrivate ||
++				(goalsAttribute.startDate && !getDifferenceBetweenDates(objectiveDetail.startDate, goalsAttribute.startDate)) ||
++				(goalsAttribute.endDate && !getDifferenceBetweenDates(goalsAttribute.endDate, objectiveDetail.endDate)))
++			? false
++			: isSaveDisabled
++				? true
++				: true;
++	};
++
++	const handleAcceptDeclineClick = (open: Boolean, okr: any, kr: any, type: String, KRType: String) => {
++		if (okr.objectiveId > 0) {
++			Promise.allSettled([props.getOkrDetail(okr.objectiveId), props.getKrDetail(kr.krId)]).then((response: any) => {
++				if (response) {
++					let getOKRDetail =
++						Boolean(response) && response.length && response[0] && response[0].value ? response[0].value : '';
++					let getKRDetail =
++						Boolean(response) && response.length && response[1] && response[1].value ? response[1].value : '';
++					if (getOKRDetail.status === 200 && getKRDetail.status === 200) {
++						if (getKRDetail.data.entity.krStatusId === Enums.KR_STATUS_PENDING) {
++							setOpenDrawer({
++								open: true,
++								okr: getOKRDetail.data.entity,
++								kr: getKRDetail.data.entity,
++								type: type,
++								KRType: 'WithParent',
++							});
++						} else {
++							setModalProps({
++								open: true,
++								type: 'AcceptKR',
++								message: t('actionAlreadyTaken'),
++								module: 'user',
++								isCancel: true,
++							});
++						}
++					}
++				}
++			});
++		}
++	};
++
++	const openSettingsDrawer = async (okrObj: any) => {
++		let okrs = JSON.parse(JSON.stringify(listOkrResult));
++		let currentORK = okrs.myGoalOkrResponses.filter((item: any) => item.goalObjectiveId === okrObj.objectiveId);
++		let getKR = currentORK[0].myGoalsDetails;
++		let obj = {
++			kr: getKR,
++			okr: currentORK[0],
++			actionType: 'editGoal',
++			goalDetail: {},
++			showAttributeDrawer: true,
++		};
++		getKR[0] = {
++			...getKR[0],
++			contributors: getKR[0].contributors.filter(
++				(item: any) => !item.isSource && item.employeeId !== userDetail.employeeId
++			),
++		};
++		// console.log(getKR, currentORK)
++		setGoalsAttribute(currentORK[0]);
++		setOpenObjectAttribute(true);
++		setdataUpdated(obj);
++		// setGoalDetail(obj);
++	};
++
++	const handleCloseModal = async (event: any, type: Number) => {
++		if (type === 1) {
++			setmodalPropsKR({ open: false, type: '', message: '', module: '' });
++			setKeyRes(false);
++		} else {
++			setmodalPropsKR({ open: false, type: '', message: '', module: '' });
++		}
++	};
++
++	return (
++		<React.Fragment>
++			<Box className='alignment-kr-card relaxed-card'>
++				<Box className='alignment-kr kr-list'>
++					{okr.okrViewKeyResults && krItem &&
++						<Box className='kr-item' key={`kr_${krItem?.krId}`}>
++							{okr?.parent !== '' && (
++								<IconButton className='connect-icon connect-icon-link'>
++									<LinkIcon />
++								</IconButton>
++							)}
++							<Box className='kr-item-col1'>
++								<img src={krFlag} alt='kr flag' />
++								<ListTooltip
++									objName={krItem?.krName || ''}
++									description={krItem?.keyNotes || ''}
++									alignmentMapDescription={true}
++									characterCount={37}
++									titleClassName={'kr-details'}
++									currentUser={currentUser}
++								/>
++							</Box>
++							<Box className='kr-item-col2'>
++								<OkrProgressBar
++									parentOkr={okr}
++									okr={krItem}
++									type={'krAlignmentMap'}
++									t={t}
++									updateProgress={props.updateProgress}
++									showEditLoader={() => { }}
++									currentUser={currentUser}
++									okrMasterData={props.okrMasterData}
++								/>
++
++								{krItem.krStatusId === Enums.KR_STATUS_PENDING ? (
++									<OkrPopperMenu
++										{...props}
++										poperClassName={'alignment-popper-menu popper-menu-list okr-list-popper-menu'}
++										okr={okr}
++										kr={krItem}
++										type={4}
++										t={t}
++										handleDeleteOkr={handleDeleteOkr}
++										KRType={'WithParent'}
++										alignmentMap={true}
++										handleAcceptDeclineClick={handleAcceptDeclineClick}
++										currentUser={currentUser}
++										poperPlacement={'bottom-start'}
++										poperContainer={false}
++										handleKRClick={handleKRClick}
++										keyAttribute={keyAttribute}
++										setKeyAttribute={setKeyAttribute}
++										keyRes={keyRes}
++										// setKeyRes={setKeyRes}
++										dataUpdated={dataUpdated}
++										setdataUpdated={setdataUpdated}
++										goalDetail={dataUpdated}
++										setGoalDetail={setdataUpdated}
++										handleDrawerClose={handleDrawerClose}
++										keyData={dataUpdated.kr}
++										handleKebabClick={handleKebabClick}
++										loader={krLoader}
++										showKr={showKr}
++									/>
++								) : (
++									<OkrPopperMenu
++										{...props}
++										poperClassName={'alignment-popper-menu popper-menu-list okr-list-popper-menu'}
++										okr={okr}
++										kr={krItem}
++										type={2}
++										t={t}
++										handleDeleteOkr={handleDeleteOkr}
++										alignmentMap={true}
++										currentUser={currentUser}
++										poperPlacement={'bottom-start'}
++										poperContainer={false}
++										handleKRClick={handleKRClick}
++										keyAttribute={keyAttribute}
++										setKeyAttribute={setKeyAttribute}
++										keyRes={keyRes}
++										// setKeyRes={setKeyRes}
++										showKr={showKr}
++										dataUpdated={dataUpdated}
++										setdataUpdated={setdataUpdated}
++										goalDetail={dataUpdated}
++										setGoalDetail={setdataUpdated}
++										handleDrawerClose={handleDrawerClose}
++										keyData={dataUpdated.kr}
++										loader={krLoader}
++										handleKebabClick={handleKebabClick}
++									/>
++								)}
++							</Box>
++						</Box>
++					}
++				</Box>
++				{/* {openObjectAttribute && ( */}
++				<GoalAttributes
++					currentCycleEndDate={currentCycleEndDate}
++					open={openObjectAttribute}
++					handleDrawerClose={handleCloseObjectiveAttribute}
++					objectiveDetail={objectiveDetail}
++					t={t}
++					{...props}
++					isGoalAttributeUpdated={isGoalAttributeUpdated}
++					setIsSaveDisabled={setIsSaveDisabled}
++					setGoalsAttribute={setGoalsAttribute}
++					goalsAttribute={goalsAttribute}
++					loader={krLoader}
++					goalAttrDateError={goalAttrDateError}
++					setGaolAttrDateError={setGaolAttrDateError}
++					setdataUpdated={setdataUpdated}
++					goalDetail={dataUpdated}
++					setGoalDetail={setdataUpdated}
++				/>
++				{/* )} */}
++			</Box>
++
++			{modalPropsKR.open && (
++				<AlertDialog
++					module={modalPropsKR.module ? modalPropsKR.module : 'user'}
++					message={modalPropsKR.message}
++					handleCloseModal={handleCloseModal}
++					modalOpen={modalPropsKR.open}
++				/>
++			)}
++		</React.Fragment>
++	);
++};
++
++export default KrResultItemCard;
++
+diff --git a/src/components/AlignmentMap/AlignmentListing/ObjectiveCard.tsx b/src/components/AlignmentMap/AlignmentListing/ObjectiveCard.tsx
+index 26a2d722..af24f754 100644
+--- a/src/components/AlignmentMap/AlignmentListing/ObjectiveCard.tsx
++++ b/src/components/AlignmentMap/AlignmentListing/ObjectiveCard.tsx
+@@ -611,7 +611,7 @@ const ObjectiveCard: React.FC<any> = (props: any) => {
+ 						</Box>
+ 					</Box>
+ 				</Box>
+-				<Box className='kr-list'>
++				<Box className='hidden-kr-list'>
+ 					{okr.okrViewKeyResults &&
+ 						okr.okrViewKeyResults.map((kr: any, index: Number) => (
+ 							<Box className='kr-item' key={`kr_${kr?.krId}`}>
+diff --git a/src/components/AlignmentMap/RelaxedMap/DiagramHelper/diagram-layout-helper.jsx b/src/components/AlignmentMap/RelaxedMap/DiagramHelper/diagram-layout-helper.jsx
+index a226c519..4f934753 100644
+--- a/src/components/AlignmentMap/RelaxedMap/DiagramHelper/diagram-layout-helper.jsx
++++ b/src/components/AlignmentMap/RelaxedMap/DiagramHelper/diagram-layout-helper.jsx
+@@ -10,6 +10,72 @@ export class DiagramLayoutHelper {
+ 		diagramIns = diagramInstance;
+ 		diagramOkrHelper = diagramOkrHelperIns;
+ 	}
++	//#region - Custom Own Layout
++	DoCustomOkrLayout(diagramInstance) {
++		let myOkrData = diagramInstance.nodes.filter((j) => {
++			return j.data && j.data.isMyOkr
++		});
++		let startY = 0;
++		for (let i = 0; i < myOkrData.length; i++) {
++			startY = startY ? startY : myOkrData[i].offsetY;
++			this.PositionNodes(diagramInstance, myOkrData[i], myOkrData[i].offsetX, startY, myOkrData[i].height, true);
++			this.PositionNodes(diagramInstance, myOkrData[i], myOkrData[i].offsetX, startY, myOkrData[i].height, false);
++			let nodes = diagramInstance.nodes.sort(function (n1, n2) {
++				return (n2.offsetY + n2.height) - (n1.offsetY + n1.height);
++			});
++			startY = nodes[0].offsetY + nodes[0].height + 100;
++		}
++	}
++
++	PositionNodes(diagramInstance, currentnode, startX, startY, maxheight, isparentarrangement) {
++		currentnode.offsetX = startX;
++		currentnode.offsetY = startY;
++		currentnode.updateChange();
++		let parentnodes = [];
++		if (isparentarrangement)
++			parentnodes = this.GetParentNodes(diagramInstance, currentnode);
++		else
++			parentnodes = this.GetChildNodes(diagramInstance, currentnode);
++		startY = this.RenderChildNodes(diagramInstance, parentnodes, startX, startY, maxheight, isparentarrangement);
++		return startY;
++	}
++
++	RenderChildNodes(diagramInstance, parentnodes, startX, startY, maxheight, isparentarrangement) {
++		for (let i = 0; i < parentnodes.length; i++) {
++			let sX = isparentarrangement ? (startX - parentnodes[i].width - 200) : (startX + parentnodes[i].width + 200);
++			startY = this.PositionNodes(diagramInstance, parentnodes[i], sX, startY, this.GetMaxHeight(maxheight, parentnodes[i]), isparentarrangement);
++			if (parentnodes.length - 1 > i) {
++				startY = startY + parentnodes[i].height + 100;
++			}
++		}
++		return startY;
++	}
++
++	GetMaxHeight(maxheight, node) {
++		return maxheight > node.height ? maxheight : node.height;
++	}
++
++	GetParentNodes(diagramInstance, currentnode) {
++		var ns = [];
++		var ps = currentnode.data.parent;
++		for (let i = 0; i < ps.length; i++) {
++			var node = diagramInstance.nodes.find((n) => n.data.objectiveUniqueId === ps[i].toString());
++			ns.push(node);
++		}
++		return ns;
++	}
++
++	GetChildNodes(diagramInstance, currentnode) {
++		var ns = [];
++		var oedges = currentnode.outEdges;
++		for (let i = 0; i < oedges.length; i++) {
++			var con = diagramInstance.connectors.find((n) => n.id === oedges[i]);
++			var node = diagramInstance.nodes.find((n) => n.id === con.targetID);
++			ns.push(node);
++		}
++		return ns;
++	}
++	//#endregion
+ 	//#region -- Focus Okr Secion
+ 	FocusMyOkrs(diagramInstance) {
+ 		let myOkrData = diagramInstance.nodes.filter((j) => {
+diff --git a/src/components/AlignmentMap/RelaxedMap/DiagramHelper/diagram-okr-helper.jsx b/src/components/AlignmentMap/RelaxedMap/DiagramHelper/diagram-okr-helper.jsx
+index 1d431559..6e411d2b 100644
+--- a/src/components/AlignmentMap/RelaxedMap/DiagramHelper/diagram-okr-helper.jsx
++++ b/src/components/AlignmentMap/RelaxedMap/DiagramHelper/diagram-okr-helper.jsx
+@@ -1,6 +1,5 @@
+ import { PortVisibility } from '@syncfusion/ej2-react-diagrams';
+ import { DiagramJsonHelper } from './diagram-json-helper';
+-import { DiagramTemplateHelper } from './diagram-template-helper';
+ export class DiagramOkrHelper {
+ 	diagramIns;
+ 	diagramTemplateHelper;
+@@ -71,12 +70,10 @@ export class DiagramOkrHelper {
+ 		return rightMidPort;
+ 	}
+ 	//#endregion
+-	construtor(diagramTemplateHelper) {
+-		this.diagramTemplateHelper = diagramTemplateHelper;
++	construtor() {
+ 	}
+-	SetHelpers(diagramInstance, diagramTemplateHelper) {
++	SetHelpers(diagramInstance) {
+ 		this.diagramIns = diagramInstance;
+-		this.diagramTemplateHelper = diagramTemplateHelper;
+ 	}
+ 
+ 	//#region Okr Templated Nodes Creation
+@@ -91,8 +88,8 @@ export class DiagramOkrHelper {
+ 		height += this.margin.bottom;
+ 		return height;
+ 	}
+-	CreateOkrNodes(diagramInstance, diagramTemplateHelper) {
+-		this.SetHelpers(diagramInstance, diagramTemplateHelper);
++	CreateOkrNodes(diagramInstance) {
++		this.SetHelpers(diagramInstance);
+ 		let ins = this;
+ 		let nodes = this.diagramIns.nodes;
+ 		let len = nodes.length;
+diff --git a/src/components/AlignmentMap/RelaxedMap/index.jsx b/src/components/AlignmentMap/RelaxedMap/index.jsx
+index 813191d2..78152696 100644
+--- a/src/components/AlignmentMap/RelaxedMap/index.jsx
++++ b/src/components/AlignmentMap/RelaxedMap/index.jsx
+@@ -4,16 +4,13 @@ import {
+ 	DataBinding,
+ 	DiagramComponent,
+ 	SnapConstraints,
++	NodeConstraints,
+ 	Inject,
+ 	DiagramTools,
+ 	ComplexHierarchicalTree,
+ 	ChildArrangement,
+ 	LineDistribution,
+ 	ConnectionPointOrigin,
+-	NodeConstraints,
+-	DiagramConstraints,
+-	ConnectorConstraints,
+-	AnnotationConstraints,
+ } from '@syncfusion/ej2-react-diagrams';
+ import { Box, Typography } from '@material-ui/core';
+ import { SampleBase } from './sample-base';
+@@ -21,19 +18,23 @@ import { DataManager } from '@syncfusion/ej2-data';
+ import { MenuComponent } from '@syncfusion/ej2-react-navigations';
+ import { ToolbarComponent } from '@syncfusion/ej2-react-navigations';
+ import { getLocalStorageItem } from '../../../services/StorageService';
++import ObjectiveCard from '../AlignmentListing/ObjectiveCard';
++import KrResultItemCard from '../AlignmentListing/KrResultItemCard';
++import StandaloneCard from '../AlignmentListing/StandaloneCard';
+ import { DiagramLayoutHelper } from './DiagramHelper/diagram-layout-helper';
+-import { DiagramJsonHelper } from './DiagramHelper/diagram-json-helper';
+-import { DiagramOkrHelper } from './DiagramHelper/diagram-okr-helper';
+-import { DiagramTemplateHelper } from './DiagramHelper/diagram-template-helper';
+ import { DiagramSelectionHelper } from './DiagramHelper/diagram-selection-helper';
++import { DiagramOkrHelper } from './DiagramHelper/diagram-okr-helper';
++import { DiagramJsonHelper } from './DiagramHelper/diagram-json-helper';
+ import okrJsonData from './DiagramHelper/okr_data';
++
+ let diagramInstance;
++let template;
++let diagramTimer;
+ let diagramLayoutHelper;
+-let diagramOkrHelper;
+-let diagramTemplateHelper;
+ let diagramSelectionHelper;
++let diagramOkrHelper;
++let alignmentData = [];
+ export default class RelaxedMap extends SampleBase {
+-	diagramTemplateHelperContext;
+ 	constructor(props) {
+ 		super(props);
+ 		const { alignResult } = this.props;
+@@ -42,10 +43,10 @@ export default class RelaxedMap extends SampleBase {
+ 			mapData: alignResult,
+ 			loggedInUser: userDetail,
+ 		};
++		template = this.diagramTemplate;
+ 		diagramLayoutHelper = new DiagramLayoutHelper();
+-		this.diagramTemplateHelperContext = diagramTemplateHelper = new DiagramTemplateHelper(this.props);
+-		diagramOkrHelper = new DiagramOkrHelper(diagramTemplateHelper);
+ 		diagramSelectionHelper = new DiagramSelectionHelper();
++		diagramOkrHelper = new DiagramOkrHelper();
+ 	}
+ 
+ 	onItemClick(args) {
+@@ -69,122 +70,110 @@ export default class RelaxedMap extends SampleBase {
+ 				break;
+ 		}
+ 	}
+-	RenameCard = (data) => {
+-		alert(data.data.TextToShow);
+-	};
+ 
+-	handleMenuClick = (data, element) => {
+-		alert(data.data.TextToShow + ' ' + element + 'd successfully');
+-	};
+-	projectActionList = (data) => {
+-		let actions = [];
+-		if (data.data.menuOptions) {
+-			data.data.menuOptions.forEach((element) => {
+-				actions.push({
+-					key: element.toLowerCase().replace(/ /g, '_'),
+-					text: element,
+-					onClick: () => {
+-						this.handleMenuClick(data, element);
+-					},
+-				});
++	diagramTemplate = (node) => {
++		let cardobject = document.querySelectorAll('.foreign-object .foreign-object');
++		if (cardobject.length > 0) {
++			cardobject.forEach(function (value, index) {
++				value.style.zIndex = cardobject.length - index;
+ 			});
+ 		}
+-		return actions;
++		if (node.data && node.data.objectiveType === 2) {
++			return (
++				<StandaloneCard
++					{...this.props}
++					data={node}
++					userDetail={this.props.userDetail}
++					handleDeleteOkr={this.props.handleDeleteOkr}
++					setOpenDrawer={this.props.setOpenDrawer}
++					setModalProps={this.props.setModalProps}
++					updateProgress={this.props.updateProgress}
++					showEditLoader={this.props.showEditLoader}
++				/>
++			);
++		}
++		else if (node.data && node.data.krItemId && node.id.indexOf("okrKrItem") >= 0) {
++			return (
++				<KrResultItemCard
++					{...this.props}
++					data={node}
++					krItemId={node.data.krItemId}
++					userDetail={this.props.userDetail}
++					handleDeleteOkr={this.props.handleDeleteOkr}
++					setModalProps={this.props.setModalProps}
++					updateProgress={this.props.updateProgress}
++					showEditLoader={this.props.showEditLoader}
++					showAddGoalForm={this.props.showAddGoalForm}
++					showAddGoal={this.props.showAddGoal}
++					durationCycleDetail={this.props.durationCycleDetail}
++					currentCycleEndDate={this.props.currentCycleEndDate}
++					currentCycleId={this.props.currentCycleId}
++					year={this.props.year}
++					t={this.props.t}
++					fetchOkr={this.props.fetchOkr}
++					setGoalDetail={this.props.setGoalDetail}
++					setIsGoalCreated={this.props.setIsGoalCreated}
++					saveAndEditObjectiveAndKr={this.props.saveAndEditObjectiveAndKr}
++					setFormSubmit={this.props.setFormSubmit}
++					formSubmit={this.props.formSubmit}
++					isGoalCreated={this.props.isGoalCreated}
++					keyDetailObject={this.props.keyDetailObject}
++					goalDetailObject={this.props.goalDetailObject}
++				// showApiMsgs={showApiMsgs}
++				// isTabChanged={isTabChanged}
++				// setIsTabChanged={setIsTabChanged}
++				// addObjectiveCallback={addObjectiveCallback}
++				/>
++			);
++			//return (<div>test - {node.data.krItemId}</div>)
++		}
++		else if (node.data && node.id.indexOf("okrFirstRow") >= 0) {
++			return (
++				<ObjectiveCard
++					{...this.props}
++					data={node}
++					userDetail={this.props.userDetail}
++					handleDeleteOkr={this.props.handleDeleteOkr}
++					setModalProps={this.props.setModalProps}
++					updateProgress={this.props.updateProgress}
++					showEditLoader={this.props.showEditLoader}
++					showAddGoalForm={this.props.showAddGoalForm}
++					showAddGoal={this.props.showAddGoal}
++					durationCycleDetail={this.props.durationCycleDetail}
++					currentCycleEndDate={this.props.currentCycleEndDate}
++					currentCycleId={this.props.currentCycleId}
++					year={this.props.year}
++					t={this.props.t}
++					fetchOkr={this.props.fetchOkr}
++					setGoalDetail={this.props.setGoalDetail}
++					setIsGoalCreated={this.props.setIsGoalCreated}
++					saveAndEditObjectiveAndKr={this.props.saveAndEditObjectiveAndKr}
++					setFormSubmit={this.props.setFormSubmit}
++					formSubmit={this.props.formSubmit}
++					isGoalCreated={this.props.isGoalCreated}
++					keyDetailObject={this.props.keyDetailObject}
++					goalDetailObject={this.props.goalDetailObject}
++				// showApiMsgs={showApiMsgs}
++				// isTabChanged={isTabChanged}
++				// setIsTabChanged={setIsTabChanged}
++				// addObjectiveCallback={addObjectiveCallback}
++				/>
++			);
++		}
++		return ("");
+ 	};
+ 
+-	increase() {
+-		let height = '500px';
+-		this.setState({ dHeight: height });
+-	}
+-	componentWillUnmount() {
+-		document.getElementById('relax-map-parent').removeEventListener("mousemove", this.handleDiagramAreaMouseMove);
+-	}
+-	componentDidMount() {
+-		let ins = this;
+-		document.getElementById('relax-map-parent').addEventListener('mousemove', this.handleDiagramAreaMouseMove);
+-	}
+-	handleDiagramAreaMouseMove(e) {
+-		diagramSelectionHelper.ToggleNodeShadow(e, diagramInstance);
+-	}
+-	createDiagram(jsonData) {
+-		//alert('relaxmap');
+-		return (
+-			<DiagramComponent
+-				id="relax-diagram"
+-				ref={(diagram) => (diagramInstance = diagram)}
+-				width={'100%'}
+-				height={'calc(100vh - 265px)'}
+-				nodeTemplate={diagramTemplateHelper.getTemplate.bind(this)}
+-				snapSettings={{ constraints: SnapConstraints.None }}
+-				dataSourceSettings={{
+-					id: DiagramJsonHelper.bindProps.okrId,
+-					parentId: DiagramJsonHelper.bindProps.okrParent,
+-					dataSource: new DataManager(jsonData),
+-					doBinding: (nodeModel, data, diagram) => {
+-					}
+-				}}
+-				//tool={DiagramTools.ZoomPan}
+-				layout={{
+-					connectionPointOrigin: ConnectionPointOrigin.SamePoint,
+-					enableAnimation: true,
+-					type: 'ComplexHierarchicalTree',
+-					orientation: 'LeftToRight',
+-					horizontalSpacing: 200,
+-					verticalSpacing: 130,
+-					arrangement: ChildArrangement.Linear,
+-					// getLayoutInfo: (node, options) => {
+-					// 	/* tslint:disable:no-string-literal */
+-					// 	if (node.data['TextToShow'] === 'General Manager') {
+-					// 		options.assistants.push(options.children[0]);
+-					// 		options.children.splice(0, 1);
+-					// 	}
+-					// 	if (!options.hasSubTree) {
+-					// 		options.type = 'Right';
+-					// 	}
+-					// },
+-				}}
+-				//Defines the default node and connector properties
+-				getNodeDefaults={(obj, diagram) => {
+-					obj.nodeTemplate = diagramTemplateHelper.getTemplate.bind(obj.data);
+-					obj.template = diagramTemplateHelper.getTemplate;
+-					obj.constraints = NodeConstraints.Default & ~NodeConstraints.Select;
+-					/* tslint:disable:no-string-literal */
+-					if (!obj.excludeFromLayout && !diagramSelectionHelper.IsSelectionHelper(obj)) {
+-						//obj.visible = false;
+-						return nodeDefaults(obj, diagram);
+-					}
+-				}}
+-				getConnectorDefaults={(connector, diagram) => {
+-					connector.constraints = ConnectorConstraints.Default & ~ConnectorConstraints.Select;
+-					if (!diagramSelectionHelper.IsSelectionHelper(connector)) {
+-						connector.visible = false;
+-						return connectorDefaults(connector, diagram);
+-					}
+-				}}
+-				click={(args) => {
+-					diagramSelectionHelper.OnClickDiagram(args, diagramInstance);
+-				}}
+-				created={() => {
+-					diagramSelectionHelper.DoReverseConnection(diagramInstance);
+-					diagramOkrHelper.CreateOkrNodes(diagramInstance, diagramTemplateHelper);
+-					diagramLayoutHelper.DockToTop(diagramInstance, diagramOkrHelper);
+-					diagramInstance.nodes.forEach((n) => {
+-						n.visible = true;
+-						for (let i = 0; i < n.annotations.length; i++) {
+-							n.annotations[i].constraints = AnnotationConstraints.ReadOnly;
+-						}
+-						//diagramInstance.dataBind();
+-					});
+-					diagramLayoutHelper.FocusMyOkrs(diagramInstance);
+-				}}
+-			>
+-				<Inject services={[DataBinding, LayoutAnimation, ComplexHierarchicalTree, LineDistribution]} />
+-			</DiagramComponent>
+-		);
+-	}
+ 	render() {
++		if (diagramTimer) {
++			console.log("timer cleared");
++			clearTimeout(diagramTimer);
++		}
++		diagramTimer = setTimeout(() => {
++			console.log("timer called");
++			onAfterDiagramCreated();
++		}, 100);
+ 		const { alignResult } = this.props;
+-		let alignmentData = [];
++		//const { t } = useTranslation();
+ 		if (alignResult.length <= 0) {
+ 			return (
+ 				<Box className='welcome-content'>
+@@ -198,16 +187,19 @@ export default class RelaxedMap extends SampleBase {
+ 			);
+ 		} else {
+ 			alignmentData = alignResult;
+-			//alignmentData = okrJsonData; //local sample json data for dev
+-			alignmentData.forEach((item, i) => {
+-				//item.index = i + 1;
+-				if (item.parent.length === 0) {
+-					item.parent = '';
+-				}
+-				return item;
+-			});
+-			DiagramJsonHelper.UpdateHelperProperties(alignmentData);
++			//alignmentData = okrJsonData;
++			alignmentData =
++				alignmentData &&
++				alignmentData.length > 0 &&
++				alignmentData.map((item, i) => {
++					//item.index = i + 1;
++					if (item.parent.length === 0) {
++						item.parent = '';
++					}
++					return item;
++				});
+ 		}
++
+ 		return (
+ 			<Box className='diagram-control-pane'>
+ 				<MenuComponent items={this.menuItems} />
+@@ -248,8 +240,67 @@ export default class RelaxedMap extends SampleBase {
+ 					</Box>
+ 				</Box>
+ 				<Box className='control-section'>
+-					<Box id="relax-map-parent" className='content-wrapper'>
+-						{this.createDiagram(alignmentData)}
++					<Box className='content-wrapper'>
++						<DiagramComponent
++							id='diagram'
++							ref={(diagram) => (diagramInstance = diagram)}
++							width={'100%'}
++							height={'1500px'}
++							//snapSettings={{ constraints: SnapConstraints.None }}
++							nodeTemplate={template}
++							// backgroundColor='#6BA5D7'
++							//configures data source settings
++							dataSourceSettings={{
++								id: 'objectiveUniqueId',
++								parentId: 'parent',
++								//dataSource: new DataManager(localBindData),
++								dataSource: new DataManager(alignmentData),
++								doBinding: (nodeModel, data, diagram) => {
++									nodeModel.nodeTemplate = template.bind(data);
++									nodeModel.template = template;
++									nodeModel.style = { boder: '1px solid #000000' };
++									// nodeModel.shape = {
++									// 	type: 'HTML',
++									// };
++									return nodeDefaults(nodeModel, diagram);
++								},
++							}}
++							layout={{
++								connectionPointOrigin: ConnectionPointOrigin.SamePoint,
++								enableAnimation: true,
++								type: 'ComplexHierarchicalTree',
++								orientation: 'LeftToRight',
++								horizontalSpacing: 200,
++								verticalSpacing: 130,
++								arrangement: ChildArrangement.Linear,
++								// getLayoutInfo: (node, options) => {
++								// 	/* tslint:disable:no-string-literal */
++								// 	if (node.data['TextToShow'] === 'General Manager') {
++								// 		options.assistants.push(options.children[0]);
++								// 		options.children.splice(0, 1);
++								// 	}
++								// 	if (!options.hasSubTree) {
++								// 		options.type = 'Right';
++								// 	}
++								// },
++							}}
++							//Disables all interactions except zoom/pan
++							//tool={DiagramTools.ZoomPan}
++							//Configures automatic layout
++
++							//Defines the default node and connector properties
++							getNodeDefaults={(obj, diagram) => {
++								/* tslint:disable:no-string-literal */
++							}}
++							getConnectorDefaults={(connector, diagram) => {
++								return connectorDefaults(connector, diagram);
++							}}
++						/* created={() => {
++							return expandAll(true);
++						}} */
++						>
++							<Inject services={[DataBinding, LayoutAnimation, ComplexHierarchicalTree, LineDistribution]} />
++						</DiagramComponent>
+ 					</Box>
+ 				</Box>
+ 				{/* <button onClick={() => expandAll()}>Expand All</button> */}
+@@ -260,19 +311,15 @@ export default class RelaxedMap extends SampleBase {
+ 
+ //sets default value for Node.
+ function nodeDefaults(obj, diagram) {
+-	obj.pivot = { x: 0, y: 0 };
++	//obj.backgroundColor = obj.data.color;
+ 	obj.style = {
+-		fill: 'white',
+-		strokeColor: '#9CD3FF',
+-		strokeWidth: 1,
+-		color: 'white'
++		fill: 'none',
++		strokeColor: 'none',
++		color: 'white',
++		borderCorner: '30',
+ 	};
+-	obj.shape = {
+-		cornerRadius: 10
+-	}
+-	obj.width = 520;
+-	obj.height = diagramOkrHelper.GetOkrHeight(obj);
+-	obj.offsetX = -window.innerWidth / 2;
++	obj.width = 500;
++	obj.height = 180;
+ 	obj.ports = [diagramOkrHelper.getLeftPort(obj), diagramOkrHelper.getRightPort(obj)];
+ 	return obj;
+ }
+@@ -311,6 +358,10 @@ function connectorDefaults(connector, diagram) {
+ 			},
+ 			shape: 'Flat',
+ 		};
++
++		// connector.sourcePortID = sourceNode.ports[1].id;
++		// connector.targetPortID = targetNode.ports[0].id;
++
+ 		connector.targetDecorator.height = 20;
+ 		connector.targetDecorator.width = 20;
+ 		connector.style = { strokeWidth: 8, strokeColor: '#8E44AD' };
+@@ -318,7 +369,6 @@ function connectorDefaults(connector, diagram) {
+ 
+ 	return connector;
+ }
+-
+ function expandAll(isOnLoad = false) {
+ 	//fits the diagram content within the viewport
+ 	// if (diagramInstance) {
+@@ -336,3 +386,53 @@ function expandAll(isOnLoad = false) {
+ 	}
+ 	// }
+ }
++function onAfterDiagramCreated() {
++	if (diagramInstance && diagramInstance.nodes) {
++		DiagramJsonHelper.UpdateHelperProperties(alignmentData);
++		diagramInstance.nodes.forEach((nodeModel, i) => {
++			let data = nodeModel.data;
++			nodeModel.children = [];
++			let okrTopItem = {
++				id: "okrFirstRow_" + i + data.objectiveUniqueId,
++				data: data,
++				width: 500,
++				height: 150,
++				pivot: { x: 0, y: 0 },
++				shape: {
++					type: 'HTML'
++				},
++				excludeFromLayout: true,
++				// constraints: NodeConstraints.Default & ~NodeConstraints.Select
++			}
++			//diagramInstance.add(testnode);
++			//nodeModel.children.push(testnode.id);
++			diagramInstance.addChild(nodeModel, okrTopItem);
++			//diagramInstance.nameTable[testnode.id] = testnode;
++			if (data && data.okrViewKeyResults && data.okrViewKeyResults.length > 0) {
++				data.okrViewKeyResults.forEach((kr) => {
++					data.krItemId = kr.krUniqueId;
++					let krItem = {
++						id: 'okrKrItem_' + kr[DiagramJsonHelper.bindProps.krId],
++						data: data,
++						width: 500,
++						height: 34,
++						pivot: { x: 0, y: 0 },
++						margin: { left: 0, top: 150 + 10 + 10, right: 0, bottom: 0 },
++						shape: {
++							type: 'HTML'
++						},
++						excludeFromLayout: true,
++						// constraints: NodeConstraints.Default & ~NodeConstraints.Select
++					}
++					//diagramInstance.add(krItem);
++					//nodeModel.children.push(krItem.id);
++					diagramInstance.addChild(nodeModel, krItem);
++					//diagramInstance.nameTable[krItem.id] = krItem;
++				});
++			}
++		});
++		diagramSelectionHelper.DoReverseConnection(diagramInstance);
++		//diagramLayoutHelper.DoCustomOkrLayout(diagramInstance);
++		diagramInstance.dataBind();
++	}
++}
+\ No newline at end of file
+diff --git a/src/components/AlignmentMap/style.scss b/src/components/AlignmentMap/style.scss
+index 6562e854..b1fef01e 100644
+--- a/src/components/AlignmentMap/style.scss
++++ b/src/components/AlignmentMap/style.scss
+@@ -480,12 +480,15 @@
+ 
+ .alignment-card {
+ 	max-width: 31.25em;
++	border: 1px solid $backgroundColor13;
++	@include border-radius(0.375em);
++	@include box-shadow(0px 0px 5px $color3Light4);
+ 	background-color: $backgroundColor1;
+-	// padding: 0.625em;
++	padding: 0.625em;
+ 	position: relative;
+ 	min-width: 31.25em;
+ 	&:hover {
+-		//    @include box-shadow(0px 10px 30px $color3Light3);
++		@include box-shadow(0px 10px 30px $color3Light3);
+ 		.card-toggle {
+ 			.okr-field-actions {
+ 				opacity: 1;
+@@ -501,7 +504,7 @@
+ 		box-shadow: none !important;
+ 		background: $color9Light2 !important;
+ 		cursor: text;
+-		//margin-right: 0.5em;
++		margin-right: 0.5em;
+ 	}
+ 	.teams-chips {
+ 		margin: 0px;
+@@ -626,73 +629,94 @@
+ 		}
+ 	}
+ }
+-
+-.diagram-control-pane #relax-diagram {
+-	[id*="_diagramLayer_svg"] {
+-		g > g > g[id*="_content_groupElement"] {
+-			-webkit-filter: drop-shadow(0px 0px 5px $color3Light4);
+-			filter: drop-shadow(0px 0px 5px $color3Light4);
++.alignment-kr-card {
++	max-width: 31.25em;
++	border: 1px solid $backgroundColor13;
++	@include border-radius(0.375em);
++	@include box-shadow(0px 0px 5px $color3Light4);
++	background-color: $backgroundColor1;
++	// padding: 0.625em;
++	position: relative;
++	min-width: 31.25em;
++	&:hover {
++		@include box-shadow(0px 10px 30px $color3Light3);
++		.card-toggle {
++			.okr-field-actions {
++				opacity: 1;
++			}
+ 		}
+ 	}
+-}
+-.diagram-control-pane #relax-diagram .svg-hover-shadow {
+-	-webkit-filter: drop-shadow(0px 10px 30px $color3Light3);
+-	filter: drop-shadow(0px 10px 30px $color3Light3);
+-}
+-.alignment-kr.kr-list {
+-	@include flex;
+-	flex-direction: column;
+-	// margin-top: 1em;
+-	.kr-item {
+-		margin-top: 5px;
+-		background: $backgroundColor9;
+-		border: 1px solid $backgroundColor12;
+-		@include border-radius(6px);
+-		// padding: 3px 0px 3px 8px;
++	.kr-list {
+ 		@include flex;
+-		align-items: center;
+-		justify-content: space-between;
+-		position: relative;
+-		.connect-icon.connect-icon-link {
+-			left: -2.0625em;
+-			top: 50%;
+-			margin-top: -12px;
+-		}
+-		.kr-item-col1 {
+-			@include flex;
+-			align-items: flex-start;
+-			padding-right: 1.25em;
+-			.kr-details {
+-				overflow: hidden;
+-				padding-left: 0.4375em;
+-				font-weight: normal;
+-			}
+-		}
+-		.kr-item-col2 {
++		flex-direction: column;
++		// margin-top: 1em;
++		.kr-item {
++			// margin-top: 5px;
++			background: $backgroundColor9;
++			border: 1px solid $backgroundColor12;
++			@include border-radius(6px);
++			// padding: 3px 0px 3px 8px;
+ 			@include flex;
+ 			align-items: center;
+-			.kr-percentage {
+-				min-width: 3.1875em;
+-				background: #f8f9fa;
+-				border: 1px solid #e1e1e2;
+-				box-sizing: border-box;
+-				@include border-radius(6px);
+-				color: $backgroundColor7;
+-				font-weight: $fontWeightBold;
+-				padding: 0.125em 0.4375em;
+-				margin: 0 0.3125em;
+-				text-align: center;
+-				cursor: pointer;
++			justify-content: space-between;
++			position: relative;
++			.connect-icon.connect-icon-link {
++				left: -2.0625em;
++				top: 50%;
++				margin-top: -12px;
+ 			}
+-			.kebab-icon {
+-				padding: 0;
+-				width: 20px;
+-				height: 20px;
+-				margin: 0px;
++			.kr-item-col1 {
++				@include flex;
++				align-items: flex-start;
++				padding-right: 1.25em;
++				.kr-details {
++					overflow: hidden;
++					padding-left: 0.4375em;
++					font-weight: normal;
++				}
++			}
++			.kr-item-col2 {
++				@include flex;
++				align-items: center;
++				.kr-percentage {
++					min-width: 3.1875em;
++					background: #f8f9fa;
++					border: 1px solid #e1e1e2;
++					box-sizing: border-box;
++					@include border-radius(6px);
++					color: $backgroundColor7;
++					font-weight: $fontWeightBold;
++					padding: 0.125em 0.4375em;
++					margin: 0 0.3125em;
++					text-align: center;
++					cursor: pointer;
++				}
++				.kebab-icon {
++					padding: 0;
++					width: 20px;
++					height: 20px;
++					margin: 0px;
++				}
+ 			}
+ 		}
+ 	}
+ }
++.hidden-kr-list {
++	display: none;
++}
++// .diagram-control-pane #relax-diagram {
++// 	[id*="_diagramLayer_svg"] {
++// 		g > g > g[id*="_content_groupElement"] {
++// 			-webkit-filter: drop-shadow(0px 0px 5px $color3Light4);
++// 			filter: drop-shadow(0px 0px 5px $color3Light4);
++// 		}
++// 	}
++// }
++// .diagram-control-pane #relax-diagram .svg-hover-shadow {
++// 	-webkit-filter: drop-shadow(0px 10px 30px $color3Light3);
++// 	filter: drop-shadow(0px 10px 30px $color3Light3);
++// }
++
+ .MuiIconButton-root.connect-icon {
+ 	position: absolute;
+ 	// top: 1em;
