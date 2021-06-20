@@ -1,0 +1,1029 @@
+ .../DiagramHelper/diagram-json-helper.jsx          |  16 +-
+ .../DiagramHelper/diagram-layout-helper.jsx        |  66 ++++
+ .../DiagramHelper/diagram-okr-helper.jsx           | 222 ++++++------
+ .../DiagramHelper/diagram-selection-helper.jsx     |  58 +--
+ src/components/AlignmentMap/RelaxedMap/index.jsx   | 387 ++++++++++++---------
+ 5 files changed, 439 insertions(+), 310 deletions(-)
+
+diff --git a/src/components/AlignmentMap/RelaxedMap/DiagramHelper/diagram-json-helper.jsx b/src/components/AlignmentMap/RelaxedMap/DiagramHelper/diagram-json-helper.jsx
+index 9a335296..0d3a87dd 100644
+--- a/src/components/AlignmentMap/RelaxedMap/DiagramHelper/diagram-json-helper.jsx
++++ b/src/components/AlignmentMap/RelaxedMap/DiagramHelper/diagram-json-helper.jsx
+@@ -24,17 +24,15 @@ export class DiagramJsonHelper {
+ 				for (let j = 0; j < data.okrViewKeyResults.length; j++) {
+ 					let result = data.okrViewKeyResults[j];
+ 					if (result[this.bindProps.krParent]) {
+-						let parentOkr = this.GetOkrResultDataById(result[this.bindProps.krParent].toString());
+-						if (parentOkr) {
+-							if (!parentOkr.childOkrs) {
+-								parentOkr.childOkrs = [];
++						let parentKrData = this.GetKrDataById(result[this.bindProps.krParent].toString());
++						if (parentKrData) {
++							if (!parentKrData.childOkrs) {
++								parentKrData.childOkrs = [];
+ 							}
+-							parentOkr.childOkrs.push(result[this.bindProps.krId]);
++							if (!parentKrData.childOkrs.find(c => c === result[this.bindProps.krId]))
++								parentKrData.childOkrs.push(result[this.bindProps.krId]);
+ 						}
+ 					}
+-					if (!result.krClassNames) {
+-						result.krClassNames = '';
+-					}
+ 				}
+ 			}
+ 		}
+@@ -57,7 +55,7 @@ export class DiagramJsonHelper {
+ 			}
+ 		}
+ 	}
+-	static GetOkrResultDataById(krId) {
++	static GetKrDataById(krId) {
+ 		let jsonData = this.jsonData;
+ 		let okrResult;
+ 		let okr;
+diff --git a/src/components/AlignmentMap/RelaxedMap/DiagramHelper/diagram-layout-helper.jsx b/src/components/AlignmentMap/RelaxedMap/DiagramHelper/diagram-layout-helper.jsx
+index a226c519..4f934753 100644
+--- a/src/components/AlignmentMap/RelaxedMap/DiagramHelper/diagram-layout-helper.jsx
++++ b/src/components/AlignmentMap/RelaxedMap/DiagramHelper/diagram-layout-helper.jsx
+@@ -10,6 +10,72 @@ export class DiagramLayoutHelper {
+ 		diagramIns = diagramInstance;
+ 		diagramOkrHelper = diagramOkrHelperIns;
+ 	}
++	//#region - Custom Own Layout
++	DoCustomOkrLayout(diagramInstance) {
++		let myOkrData = diagramInstance.nodes.filter((j) => {
++			return j.data && j.data.isMyOkr
++		});
++		let startY = 0;
++		for (let i = 0; i < myOkrData.length; i++) {
++			startY = startY ? startY : myOkrData[i].offsetY;
++			this.PositionNodes(diagramInstance, myOkrData[i], myOkrData[i].offsetX, startY, myOkrData[i].height, true);
++			this.PositionNodes(diagramInstance, myOkrData[i], myOkrData[i].offsetX, startY, myOkrData[i].height, false);
++			let nodes = diagramInstance.nodes.sort(function (n1, n2) {
++				return (n2.offsetY + n2.height) - (n1.offsetY + n1.height);
++			});
++			startY = nodes[0].offsetY + nodes[0].height + 100;
++		}
++	}
++
++	PositionNodes(diagramInstance, currentnode, startX, startY, maxheight, isparentarrangement) {
++		currentnode.offsetX = startX;
++		currentnode.offsetY = startY;
++		currentnode.updateChange();
++		let parentnodes = [];
++		if (isparentarrangement)
++			parentnodes = this.GetParentNodes(diagramInstance, currentnode);
++		else
++			parentnodes = this.GetChildNodes(diagramInstance, currentnode);
++		startY = this.RenderChildNodes(diagramInstance, parentnodes, startX, startY, maxheight, isparentarrangement);
++		return startY;
++	}
++
++	RenderChildNodes(diagramInstance, parentnodes, startX, startY, maxheight, isparentarrangement) {
++		for (let i = 0; i < parentnodes.length; i++) {
++			let sX = isparentarrangement ? (startX - parentnodes[i].width - 200) : (startX + parentnodes[i].width + 200);
++			startY = this.PositionNodes(diagramInstance, parentnodes[i], sX, startY, this.GetMaxHeight(maxheight, parentnodes[i]), isparentarrangement);
++			if (parentnodes.length - 1 > i) {
++				startY = startY + parentnodes[i].height + 100;
++			}
++		}
++		return startY;
++	}
++
++	GetMaxHeight(maxheight, node) {
++		return maxheight > node.height ? maxheight : node.height;
++	}
++
++	GetParentNodes(diagramInstance, currentnode) {
++		var ns = [];
++		var ps = currentnode.data.parent;
++		for (let i = 0; i < ps.length; i++) {
++			var node = diagramInstance.nodes.find((n) => n.data.objectiveUniqueId === ps[i].toString());
++			ns.push(node);
++		}
++		return ns;
++	}
++
++	GetChildNodes(diagramInstance, currentnode) {
++		var ns = [];
++		var oedges = currentnode.outEdges;
++		for (let i = 0; i < oedges.length; i++) {
++			var con = diagramInstance.connectors.find((n) => n.id === oedges[i]);
++			var node = diagramInstance.nodes.find((n) => n.id === con.targetID);
++			ns.push(node);
++		}
++		return ns;
++	}
++	//#endregion
+ 	//#region -- Focus Okr Secion
+ 	FocusMyOkrs(diagramInstance) {
+ 		let myOkrData = diagramInstance.nodes.filter((j) => {
+diff --git a/src/components/AlignmentMap/RelaxedMap/DiagramHelper/diagram-okr-helper.jsx b/src/components/AlignmentMap/RelaxedMap/DiagramHelper/diagram-okr-helper.jsx
+index 1d431559..55d44c56 100644
+--- a/src/components/AlignmentMap/RelaxedMap/DiagramHelper/diagram-okr-helper.jsx
++++ b/src/components/AlignmentMap/RelaxedMap/DiagramHelper/diagram-okr-helper.jsx
+@@ -1,11 +1,10 @@
+ import { PortVisibility } from '@syncfusion/ej2-react-diagrams';
+ import { DiagramJsonHelper } from './diagram-json-helper';
+-import { DiagramTemplateHelper } from './diagram-template-helper';
+ export class DiagramOkrHelper {
+ 	diagramIns;
+ 	diagramTemplateHelper;
+ 	canvas;
+-	firstRowHeight = 200;
++	firstRowHeight = 165;
+ 	krHeight = 34;
+ 	margin = { left: 10, top: 10, right: 10, bottom: 10 };
+ 	krSpace = 5;
+@@ -71,12 +70,10 @@ export class DiagramOkrHelper {
+ 		return rightMidPort;
+ 	}
+ 	//#endregion
+-	construtor(diagramTemplateHelper) {
+-		this.diagramTemplateHelper = diagramTemplateHelper;
++	construtor() {
+ 	}
+-	SetHelpers(diagramInstance, diagramTemplateHelper) {
++	SetHelpers(diagramInstance) {
+ 		this.diagramIns = diagramInstance;
+-		this.diagramTemplateHelper = diagramTemplateHelper;
+ 	}
+ 
+ 	//#region Okr Templated Nodes Creation
+@@ -91,134 +88,151 @@ export class DiagramOkrHelper {
+ 		height += this.margin.bottom;
+ 		return height;
+ 	}
+-	CreateOkrNodes(diagramInstance, diagramTemplateHelper) {
+-		this.SetHelpers(diagramInstance, diagramTemplateHelper);
++	CreateOkrNodes(diagramInstance) {
++		this.SetHelpers(diagramInstance);
+ 		let ins = this;
+ 		let nodes = this.diagramIns.nodes;
+ 		let len = nodes.length;
+ 		for (let i = 0; i < len; i++) {
+-			ins.CreateOkrNode(nodes[i], nodes[i].data, diagramInstance);
++			ins.CreateOkrNode(nodes[i], diagramInstance);
+ 		}
+ 	}
+-	CreateOkrNode(node, data) {
+-		this.CreateFirstRow(node, data);
+-		this.CreateKrResultItems(node, data);
+-		this.UpdateChildOffsets(node);
++	CreateOkrNode(node, diagramIns) {
++		this.CreateOkrTopItem(node, diagramIns);
++		this.CreateKrResultItems(node, diagramIns);
++		//this.UpdateChildOffsets(node);
+ 	}
+-	CreateFirstRow(node, okrData) {
++	CreateOkrTopItem(nodeModel, diagramIns) {
+ 		let margin = this.margin;
+-		let okrFirstRow = {
+-			id: node.id + '_okrFirstRow',
++		let data = nodeModel.data;
++		//nodeModel.children = [];
++		let okrTopItem = {
++			id: "okrItem_" + data[DiagramJsonHelper.bindProps.okrId],
++			data: data,
+ 			height: this.firstRowHeight,
+-			width: node.width - margin.right,
+-			data: okrData,
+-			//template: this.diagramTemplateHelper.getTemplate,
++			width: nodeModel.width - margin.right,
+ 			shape: {
+ 				type: 'HTML',
+ 			},
+-			pivot: { x: 0, y: 0 },
+-			excludeFromLayout: true,
+-		};
+-		//node.type = 'group';
+-		//this.diagramIns.addChild(node, okrFirstRow);
+-
+-		this.AddChildren(node, okrFirstRow);
+-		let data = { "isExpanded": "true" };
+-		let contributorIconNode = {
+-			id: node.id + '_contributorIcon',
+-			height: this.iconInfo.width,
+-			width: this.iconInfo.height,
+-			data: okrData,
+ 			style: {
+-				fill: "none"
+-			},
+-			//template: this.diagramTemplateHelper.getTemplate,
+-			shape: {
+-				type: 'HTML'
++				fill: 'green'
+ 			},
+ 			pivot: { x: 0, y: 0 },
+-			excludeFromLayout: true
++			margin: { left: margin.left, top: margin.top, right: 0, bottom: 0 },
++			excludeFromLayout: true,
++			// constraints: NodeConstraints.Default & ~NodeConstraints.Select
+ 		}
+-		this.AddChildren(node, contributorIconNode);
+ 
+-		let sourceIconNode = {
+-			id: node.id + '_sourceIcon',
+-			height: this.iconInfo.width,
+-			width: this.iconInfo.height,
+-			data: okrData,
+-			style: {
+-				fill: "none"
+-			},
+-			//margin: { left: node.width, top: 0, right: 0, bottom: 0 },
+-			//template: this.diagramTemplateHelper.getTemplate,
+-			shape: {
+-				type: 'HTML',
+-			},
+-			pivot: { x: 0, y: 0 },
+-			excludeFromLayout: true
+-		}
+-		this.AddChildren(node, sourceIconNode);
++		this.AddChildren(nodeModel, okrTopItem, diagramIns);
++
++		// let contributorIconNode = {
++		// 	id: node.id + '_contributorIcon',
++		// 	height: this.iconInfo.width,
++		// 	width: this.iconInfo.height,
++		// 	data: okrData,
++		// 	style: {
++		// 		fill: "none"
++		// 	},
++		// 	//template: this.diagramTemplateHelper.getTemplate,
++		// 	shape: {
++		// 		type: 'HTML'
++		// 	},
++		// 	pivot: { x: 0, y: 0 },
++		// 	excludeFromLayout: true
++		// }
++		// this.AddChildren(node, contributorIconNode);
++
++		// let sourceIconNode = {
++		// 	id: node.id + '_sourceIcon',
++		// 	height: this.iconInfo.width,
++		// 	width: this.iconInfo.height,
++		// 	data: okrData,
++		// 	style: {
++		// 		fill: "none"
++		// 	},
++		// 	//margin: { left: node.width, top: 0, right: 0, bottom: 0 },
++		// 	//template: this.diagramTemplateHelper.getTemplate,
++		// 	shape: {
++		// 		type: 'HTML',
++		// 	},
++		// 	pivot: { x: 0, y: 0 },
++		// 	excludeFromLayout: true
++		// }
++		// this.AddChildren(node, sourceIconNode);
+ 	}
+-	AddChildren(parentNode, child) {
+-		this.diagramIns.add(child);
+-		if (!parentNode.children) {
+-			parentNode.children = [];
+-		}
+-		parentNode.children.push(child.id);
++	AddChildren(parentNode, child, diagramIns) {
++		//diagramIns.add(child);
++		// if (!parentNode.children) {
++		// 	parentNode.children = [];
++		// }
++		// parentNode.children.push(child.id);
++		diagramIns.addChild(parentNode, child);
+ 	}
+-	CreateKrResultItems(node, okrData) {
++	CreateKrResultItems(nodeModel, diagramIns) {
+ 		let margin = this.margin;
+-		if (okrData.okrViewKeyResults && okrData.okrViewKeyResults.length > 0) {
++		let okrData = nodeModel.data;
++
++		if (okrData && okrData.okrViewKeyResults && okrData.okrViewKeyResults.length > 0) {
++			let startY = this.firstRowHeight;
+ 			for (let i = 0; i < okrData.okrViewKeyResults.length; i++) {
+-				let okrKrItemRow = {
+-					id: 'okrKrItem_' + okrData.okrViewKeyResults[i][this.bindProps.krId],
++				let kr = okrData.okrViewKeyResults[i];
++				let krId = kr[DiagramJsonHelper.bindProps.krId];
++				let krWidth = nodeModel.width - 10;
++				okrData["krItemId"] = krId; //for template
++				okrData["diagramParentNodeId"] = nodeModel.id;
++				// okrData["kr"] = kr;
++				let krItem = {
++					id: "krResItem_" + krId,
++					data: okrData,
+ 					height: this.krHeight,
+-					width: node.width - margin.left - margin.right,
+-					data: { parentNode: node, okr: okrData, kr: okrData.okrViewKeyResults[i] },
+-					//template: this.diagramTemplateHelper.getTemplate,
++					width: krWidth,
+ 					shape: {
+ 						type: 'HTML',
+ 					},
++					style: {
++						fill: 'pink'
++					},
+ 					pivot: { x: 0, y: 0 },
++					margin: { left: margin.left, top: startY, right: 0, bottom: 0 },
+ 					excludeFromLayout: true,
+-				};
+-				//this.diagramIns.addChild(node, okrKrItemRow);
+-				this.diagramIns.add(okrKrItemRow);
+-				node.children.push(okrKrItemRow.id);
+-			}
+-		}
+-	}
+-	UpdateChildOffsets(node) {
+-		let margin = this.margin;
+-		let okrFirstRow = this.diagramIns.nodes.find((n) => n.id === node.id + '_okrFirstRow');
+-		let okrData = node.data;
+-		if (okrFirstRow) {
+-			okrFirstRow.offsetX = node.offsetX + margin.left;
+-			okrFirstRow.offsetY = node.offsetY + margin.top;
+-		}
+-		if (okrData && okrData.okrViewKeyResults && okrData.okrViewKeyResults.length > 0) {
+-			let startX = node.offsetX + margin.left;
+-			let startY = node.offsetY + margin.top + 190;
+-			for (let i = 0; i < okrData.okrViewKeyResults.length; i++) {
+-				let krId = okrData.okrViewKeyResults[i][this.bindProps.krId];
+-				let okrKrItemRow = this.diagramIns.nodes.find((n) => n.id === 'okrKrItem_' + krId);
+-				if (okrKrItemRow) {
+-					okrKrItemRow.offsetX = startX;
+-					okrKrItemRow.offsetY = startY;
+-					startY += okrKrItemRow.height + this.krSpace;
++					// constraints: NodeConstraints.Default & ~NodeConstraints.Select
+ 				}
++				this.AddChildren(nodeModel, krItem, diagramIns);
++				startY += krItem.height + this.krSpace;
+ 			}
+ 		}
+-		let contributorIcon = this.diagramIns.nodes.find((n) => n.id === node.id + '_contributorIcon');
+-		if (contributorIcon) {
+-			contributorIcon.offsetX = node.offsetX + node.width - margin.right;
+-			contributorIcon.offsetY = node.offsetY + margin.top + this.iconInfo.margin.top;
+-		}
+-		let sourceIcon = this.diagramIns.nodes.find((n) => n.id === node.id + '_sourceIcon');
+-		if (sourceIcon) {
+-			sourceIcon.offsetX = node.offsetX + margin.left;
+-			sourceIcon.offsetY = node.offsetY + margin.top + this.iconInfo.margin.top;
+-		}
+ 	}
++	// UpdateChildOffsets(node) {
++	// 	let margin = this.margin;
++	// 	let okrFirstRow = this.diagramIns.nodes.find((n) => n.id === node.id + '_okrFirstRow');
++	// 	let okrData = node.data;
++	// 	if (okrFirstRow) {
++	// 		okrFirstRow.offsetX = node.offsetX + margin.left;
++	// 		okrFirstRow.offsetY = node.offsetY + margin.top;
++	// 	}
++	// 	if (okrData && okrData.okrViewKeyResults && okrData.okrViewKeyResults.length > 0) {
++	// 		let startX = node.offsetX + margin.left;
++	// 		let startY = node.offsetY + margin.top + 190;
++	// 		for (let i = 0; i < okrData.okrViewKeyResults.length; i++) {
++	// 			let krId = okrData.okrViewKeyResults[i][this.bindProps.krId];
++	// 			let okrKrItemRow = this.diagramIns.nodes.find((n) => n.id === 'okrKrItem_' + krId);
++	// 			if (okrKrItemRow) {
++	// 				okrKrItemRow.offsetX = startX;
++	// 				okrKrItemRow.offsetY = startY;
++	// 				startY += okrKrItemRow.height + this.krSpace;
++	// 			}
++	// 		}
++	// 	}
++	// 	let contributorIcon = this.diagramIns.nodes.find((n) => n.id === node.id + '_contributorIcon');
++	// 	if (contributorIcon) {
++	// 		contributorIcon.offsetX = node.offsetX + node.width - margin.right;
++	// 		contributorIcon.offsetY = node.offsetY + margin.top + this.iconInfo.margin.top;
++	// 	}
++	// 	let sourceIcon = this.diagramIns.nodes.find((n) => n.id === node.id + '_sourceIcon');
++	// 	if (sourceIcon) {
++	// 		sourceIcon.offsetX = node.offsetX + margin.left;
++	// 		sourceIcon.offsetY = node.offsetY + margin.top + this.iconInfo.margin.top;
++	// 	}
++	// }
+ 	//#endregion
+ }
+diff --git a/src/components/AlignmentMap/RelaxedMap/DiagramHelper/diagram-selection-helper.jsx b/src/components/AlignmentMap/RelaxedMap/DiagramHelper/diagram-selection-helper.jsx
+index b7b8b3cd..ea5c51c2 100644
+--- a/src/components/AlignmentMap/RelaxedMap/DiagramHelper/diagram-selection-helper.jsx
++++ b/src/components/AlignmentMap/RelaxedMap/DiagramHelper/diagram-selection-helper.jsx
+@@ -41,6 +41,7 @@ let connectorSelectedStyle = {
+ 	strokeWidth: 2,
+ 	opacity: 1,
+ };
++let krResIdPrefix = "krResItem";
+ export class DiagramSelectionHelper {
+ 	//#region Node Selection
+ 	diagramIns;
+@@ -114,25 +115,32 @@ export class DiagramSelectionHelper {
+ 
+ 	//#region  - Kr result item selection
+ 	GetKrResultItem(args) {
+-		if (args && args.actualObject && args.actualObject.id.indexOf('okrKrItem_') >= 0) {
++		if (args && args.actualObject && args.actualObject.id.indexOf(krResIdPrefix + '_') >= 0) {
+ 			return args.actualObject;
+ 		}
+ 		return null;
+ 	}
+-	OnClickDiagram(args, diagramInstance) {
++	GetKrData(krItemNode) {
++		let okrData = krItemNode.data;
++		let krItemId = krItemNode.data.krItemId;
++		if (okrData && krItemId && okrData.okrViewKeyResults && okrData.okrViewKeyResults.length > 0) {
++			return okrData.okrViewKeyResults.find(kr => kr[this.bindProps.krId] === krItemId);
++		}
++		return null;
++	}
++	OnClickDiagram(args, diagramInstance, e) {
+ 		this.SetHelpers(diagramInstance);
+ 		this.RemoveAllSelection();
++		//let actualObject = 
+ 		if (args && args.actualObject) {
+ 			if (args.actualObject.id.indexOf("_contributorIcon") >= 0) {
+ 				this.ToggleExpand(args.actualObject)
+ 			} else {
+ 				let krItemNode = this.GetKrResultItem(args);
+-				if (krItemNode && krItemNode.data && krItemNode.data.kr) {
+-					let rootKrNode = this.GetRootKrNode(krItemNode, krItemNode.data.kr);
+-					if (rootKrNode && rootKrNode.data && rootKrNode.data.kr) {
+-						let okr = rootKrNode.data.okr;
+-						let kr = rootKrNode.data.kr;
+-						this.SelectKrResult(rootKrNode, kr, okr);
++				if (krItemNode && krItemNode.data && krItemNode.data.krItemId) {
++					let rootKrNode = this.GetRootKrNode(krItemNode);
++					if (rootKrNode && rootKrNode.data && rootKrNode.data.krItemId) {
++						this.SelectKrResult(rootKrNode);
+ 						this.ToggleParentConnectorStyle(parentConnectorHiddenStyle);
+ 					}
+ 				}
+@@ -172,15 +180,14 @@ export class DiagramSelectionHelper {
+ 	}
+ 
+ 
+-	GetRootKrNode(krItemNode, krData) {
++	GetRootKrNode(krItemNode) {
+ 		let parentNode = krItemNode;
+ 		let isParentKrFound = true;
+ 		while (isParentKrFound) {
+-			let nodeId = parentNode.data.parentNode.id;
+-			let parentKrNode = this.GetNode('okrKrItem_' + krData[this.bindProps.krParent]);
+-			if (parentKrNode && parentKrNode.data && parentKrNode.data.kr) {
++			let krData = this.GetKrData(parentNode);
++			let parentKrNode = this.GetNode(krResIdPrefix + '_' + krData[this.bindProps.krParent]);
++			if (parentKrNode && parentKrNode.data && parentKrNode.data.krItemId) {
+ 				parentNode = parentKrNode;
+-				krData = parentNode.data.kr;
+ 			} else {
+ 				isParentKrFound = false;
+ 			}
+@@ -217,10 +224,11 @@ export class DiagramSelectionHelper {
+ 		return link;
+ 	}
+ 	CanHighlight(krNode) {
+-		if (krNode.data && krNode.data.parentNode) {
+-			return this.diagramIns.getNodeObject(krNode.data.parentNode.id).visible;
+-		}
+-		return false;
++		// if (krNode.data && krNode.data.parentNode) {
++		// 	return this.diagramIns.getNodeObject(krNode.data.parentNode.id).visible;
++		// }
++		// return false;
++		return true;
+ 	}
+ 	SetNodeProperty(node, name, value) {
+ 		let curNode = this.diagramIns.nodes.find(n => n.id == node.id);
+@@ -229,16 +237,17 @@ export class DiagramSelectionHelper {
+ 		}
+ 		node[name] = value;
+ 	}
+-	CreateConnections(krNode, krData, okrData) {
++	CreateConnections(krNode) {
++		let krData = this.GetKrData(krNode);
+ 		let srcKrId = krData[this.bindProps.krId];
+ 		let targetElementIds = krData.childOkrs;
+-		let srcKrNode = this.GetNode('okrKrItem_' + srcKrId);
++		let srcKrNode = this.GetNode(krResIdPrefix + '_' + srcKrId);
+ 		if (this.CanHighlight(srcKrNode)) {
+ 			let srcHelperNode = this.GetOrCreateHelperNode(srcKrId, 'source', srcKrNode, krData);
+ 			for (let i = 0; i < targetElementIds.length; i++) {
+-				let targetKrNode = this.GetNode('okrKrItem_' + targetElementIds[i]);
++				let targetKrNode = this.GetNode(krResIdPrefix + '_' + targetElementIds[i]);
+ 				if (this.CanHighlight(targetKrNode)) {
+-					let targetKrData = targetKrNode.data.kr;
++					let targetKrData= this.GetKrData(targetKrNode);
+ 
+ 					if (targetKrData && targetKrData.childOkrs) {
+ 						this.SelectKrResult(targetKrNode, targetKrData, targetKrNode.data.okr);
+@@ -249,7 +258,7 @@ export class DiagramSelectionHelper {
+ 					// 	this.reachedMyOkr = true;
+ 					// }
+ 					let targetHelperNode = this.GetOrCreateHelperNode(
+-						'okrKrItem_' + targetElementIds[i],
++						krResIdPrefix + '_' + targetElementIds[i],
+ 						'target',
+ 						targetKrNode,
+ 						targetKrData
+@@ -444,15 +453,16 @@ export class DiagramSelectionHelper {
+ 		return connModel;
+ 	}
+ 
+-	SelectKrResult(krNode, krData, okrData) {
++	SelectKrResult(krNode) {
+ 		if (krNode.visible) {
++			let krData = this.GetKrData(krNode);
+ 			this.AddClassToElement('kr_' + krData[this.bindProps.krId])
+ 			if (krData && krData.childOkrs) {
+ 				let ins = this;
+ 				krData.childOkrs.forEach((childId) => {
+ 					ins.AddClassToElement('kr_' + childId);
+ 				});
+-				this.CreateConnections(krNode, krData, okrData);
++				this.CreateConnections(krNode);
+ 			}
+ 		}
+ 	}
+diff --git a/src/components/AlignmentMap/RelaxedMap/index.jsx b/src/components/AlignmentMap/RelaxedMap/index.jsx
+index 813191d2..cb348645 100644
+--- a/src/components/AlignmentMap/RelaxedMap/index.jsx
++++ b/src/components/AlignmentMap/RelaxedMap/index.jsx
+@@ -4,16 +4,13 @@ import {
+ 	DataBinding,
+ 	DiagramComponent,
+ 	SnapConstraints,
++	NodeConstraints,
+ 	Inject,
+ 	DiagramTools,
+ 	ComplexHierarchicalTree,
+ 	ChildArrangement,
+ 	LineDistribution,
+ 	ConnectionPointOrigin,
+-	NodeConstraints,
+-	DiagramConstraints,
+-	ConnectorConstraints,
+-	AnnotationConstraints,
+ } from '@syncfusion/ej2-react-diagrams';
+ import { Box, Typography } from '@material-ui/core';
+ import { SampleBase } from './sample-base';
+@@ -21,19 +18,23 @@ import { DataManager } from '@syncfusion/ej2-data';
+ import { MenuComponent } from '@syncfusion/ej2-react-navigations';
+ import { ToolbarComponent } from '@syncfusion/ej2-react-navigations';
+ import { getLocalStorageItem } from '../../../services/StorageService';
++import ObjectiveCard from '../AlignmentListing/ObjectiveCard';
++import KrResultItemCard from '../AlignmentListing/KrResultItemCard';
++import StandaloneCard from '../AlignmentListing/StandaloneCard';
+ import { DiagramLayoutHelper } from './DiagramHelper/diagram-layout-helper';
+-import { DiagramJsonHelper } from './DiagramHelper/diagram-json-helper';
+-import { DiagramOkrHelper } from './DiagramHelper/diagram-okr-helper';
+-import { DiagramTemplateHelper } from './DiagramHelper/diagram-template-helper';
+ import { DiagramSelectionHelper } from './DiagramHelper/diagram-selection-helper';
++import { DiagramOkrHelper } from './DiagramHelper/diagram-okr-helper';
++import { DiagramJsonHelper } from './DiagramHelper/diagram-json-helper';
+ import okrJsonData from './DiagramHelper/okr_data';
++
+ let diagramInstance;
++let template;
++let diagramTimer;
+ let diagramLayoutHelper;
+-let diagramOkrHelper;
+-let diagramTemplateHelper;
+ let diagramSelectionHelper;
++let diagramOkrHelper;
++let alignmentData = [];
+ export default class RelaxedMap extends SampleBase {
+-	diagramTemplateHelperContext;
+ 	constructor(props) {
+ 		super(props);
+ 		const { alignResult } = this.props;
+@@ -42,10 +43,10 @@ export default class RelaxedMap extends SampleBase {
+ 			mapData: alignResult,
+ 			loggedInUser: userDetail,
+ 		};
++		template = this.diagramTemplate;
+ 		diagramLayoutHelper = new DiagramLayoutHelper();
+-		this.diagramTemplateHelperContext = diagramTemplateHelper = new DiagramTemplateHelper(this.props);
+-		diagramOkrHelper = new DiagramOkrHelper(diagramTemplateHelper);
+ 		diagramSelectionHelper = new DiagramSelectionHelper();
++		diagramOkrHelper = new DiagramOkrHelper();
+ 	}
+ 
+ 	onItemClick(args) {
+@@ -69,122 +70,122 @@ export default class RelaxedMap extends SampleBase {
+ 				break;
+ 		}
+ 	}
+-	RenameCard = (data) => {
+-		alert(data.data.TextToShow);
+-	};
+-
+-	handleMenuClick = (data, element) => {
+-		alert(data.data.TextToShow + ' ' + element + 'd successfully');
+-	};
+-	projectActionList = (data) => {
+-		let actions = [];
+-		if (data.data.menuOptions) {
+-			data.data.menuOptions.forEach((element) => {
+-				actions.push({
+-					key: element.toLowerCase().replace(/ /g, '_'),
+-					text: element,
+-					onClick: () => {
+-						this.handleMenuClick(data, element);
+-					},
+-				});
+-			});
+-		}
+-		return actions;
+-	};
+-
+-	increase() {
+-		let height = '500px';
+-		this.setState({ dHeight: height });
+-	}
+ 	componentWillUnmount() {
+-		document.getElementById('relax-map-parent').removeEventListener("mousemove", this.handleDiagramAreaMouseMove);
++		//document.getElementById('relax-map-parent').removeEventListener("mousemove", this.handleDiagramAreaMouseMove);
+ 	}
+ 	componentDidMount() {
+ 		let ins = this;
+-		document.getElementById('relax-map-parent').addEventListener('mousemove', this.handleDiagramAreaMouseMove);
++		// document.getElementById("relax-diagram").addEventListener('click', function () {
++		// 	alert('hi');
++		// });
++		//document.getElementById('relax-map-parent').addEventListener('mousemove', this.handleDiagramAreaMouseMove);
+ 	}
+ 	handleDiagramAreaMouseMove(e) {
+ 		diagramSelectionHelper.ToggleNodeShadow(e, diagramInstance);
+ 	}
+-	createDiagram(jsonData) {
+-		//alert('relaxmap');
+-		return (
+-			<DiagramComponent
+-				id="relax-diagram"
+-				ref={(diagram) => (diagramInstance = diagram)}
+-				width={'100%'}
+-				height={'calc(100vh - 265px)'}
+-				nodeTemplate={diagramTemplateHelper.getTemplate.bind(this)}
+-				snapSettings={{ constraints: SnapConstraints.None }}
+-				dataSourceSettings={{
+-					id: DiagramJsonHelper.bindProps.okrId,
+-					parentId: DiagramJsonHelper.bindProps.okrParent,
+-					dataSource: new DataManager(jsonData),
+-					doBinding: (nodeModel, data, diagram) => {
+-					}
+-				}}
+-				//tool={DiagramTools.ZoomPan}
+-				layout={{
+-					connectionPointOrigin: ConnectionPointOrigin.SamePoint,
+-					enableAnimation: true,
+-					type: 'ComplexHierarchicalTree',
+-					orientation: 'LeftToRight',
+-					horizontalSpacing: 200,
+-					verticalSpacing: 130,
+-					arrangement: ChildArrangement.Linear,
+-					// getLayoutInfo: (node, options) => {
+-					// 	/* tslint:disable:no-string-literal */
+-					// 	if (node.data['TextToShow'] === 'General Manager') {
+-					// 		options.assistants.push(options.children[0]);
+-					// 		options.children.splice(0, 1);
+-					// 	}
+-					// 	if (!options.hasSubTree) {
+-					// 		options.type = 'Right';
+-					// 	}
+-					// },
+-				}}
+-				//Defines the default node and connector properties
+-				getNodeDefaults={(obj, diagram) => {
+-					obj.nodeTemplate = diagramTemplateHelper.getTemplate.bind(obj.data);
+-					obj.template = diagramTemplateHelper.getTemplate;
+-					obj.constraints = NodeConstraints.Default & ~NodeConstraints.Select;
+-					/* tslint:disable:no-string-literal */
+-					if (!obj.excludeFromLayout && !diagramSelectionHelper.IsSelectionHelper(obj)) {
+-						//obj.visible = false;
+-						return nodeDefaults(obj, diagram);
+-					}
+-				}}
+-				getConnectorDefaults={(connector, diagram) => {
+-					connector.constraints = ConnectorConstraints.Default & ~ConnectorConstraints.Select;
+-					if (!diagramSelectionHelper.IsSelectionHelper(connector)) {
+-						connector.visible = false;
+-						return connectorDefaults(connector, diagram);
+-					}
+-				}}
+-				click={(args) => {
+-					diagramSelectionHelper.OnClickDiagram(args, diagramInstance);
+-				}}
+-				created={() => {
+-					diagramSelectionHelper.DoReverseConnection(diagramInstance);
+-					diagramOkrHelper.CreateOkrNodes(diagramInstance, diagramTemplateHelper);
+-					diagramLayoutHelper.DockToTop(diagramInstance, diagramOkrHelper);
+-					diagramInstance.nodes.forEach((n) => {
+-						n.visible = true;
+-						for (let i = 0; i < n.annotations.length; i++) {
+-							n.annotations[i].constraints = AnnotationConstraints.ReadOnly;
+-						}
+-						//diagramInstance.dataBind();
+-					});
+-					diagramLayoutHelper.FocusMyOkrs(diagramInstance);
+-				}}
+-			>
+-				<Inject services={[DataBinding, LayoutAnimation, ComplexHierarchicalTree, LineDistribution]} />
+-			</DiagramComponent>
+-		);
+-	}
++	diagramTemplate = (node) => {
++		let cardobject = document.querySelectorAll('.foreign-object .foreign-object');
++		// if (cardobject.length > 0) {
++		// 	cardobject.forEach(function (value, index) {
++		// 		value.style.zIndex = cardobject.length - index;
++		// 	});
++		// }
++		if (node.data && node.data.objectiveType === 2) {
++			return (
++				<StandaloneCard
++					{...this.props}
++					data={node}
++					userDetail={this.props.userDetail}
++					handleDeleteOkr={this.props.handleDeleteOkr}
++					setOpenDrawer={this.props.setOpenDrawer}
++					setModalProps={this.props.setModalProps}
++					updateProgress={this.props.updateProgress}
++					showEditLoader={this.props.showEditLoader}
++				/>
++			);
++		}
++		else if (node.data && node.data.krItemId && node.id.indexOf("krResItem") >= 0) {
++			return (
++				<KrResultItemCard
++					{...this.props}
++					data={node}
++					krItemId={node.data.krItemId}
++					userDetail={this.props.userDetail}
++					handleDeleteOkr={this.props.handleDeleteOkr}
++					setModalProps={this.props.setModalProps}
++					updateProgress={this.props.updateProgress}
++					showEditLoader={this.props.showEditLoader}
++					showAddGoalForm={this.props.showAddGoalForm}
++					showAddGoal={this.props.showAddGoal}
++					durationCycleDetail={this.props.durationCycleDetail}
++					currentCycleEndDate={this.props.currentCycleEndDate}
++					currentCycleId={this.props.currentCycleId}
++					year={this.props.year}
++					t={this.props.t}
++					fetchOkr={this.props.fetchOkr}
++					setGoalDetail={this.props.setGoalDetail}
++					setIsGoalCreated={this.props.setIsGoalCreated}
++					saveAndEditObjectiveAndKr={this.props.saveAndEditObjectiveAndKr}
++					setFormSubmit={this.props.setFormSubmit}
++					formSubmit={this.props.formSubmit}
++					isGoalCreated={this.props.isGoalCreated}
++					keyDetailObject={this.props.keyDetailObject}
++					goalDetailObject={this.props.goalDetailObject}
++				// showApiMsgs={showApiMsgs}
++				// isTabChanged={isTabChanged}
++				// setIsTabChanged={setIsTabChanged}
++				// addObjectiveCallback={addObjectiveCallback}
++				/>
++			);
++			//return (<div>test - {node.data.krItemId}</div>)
++		}
++		else if (node.data && node.id.indexOf("okrItem") >= 0) {
++			return (
++				<ObjectiveCard
++					{...this.props}
++					data={node}
++					userDetail={this.props.userDetail}
++					handleDeleteOkr={this.props.handleDeleteOkr}
++					setModalProps={this.props.setModalProps}
++					updateProgress={this.props.updateProgress}
++					showEditLoader={this.props.showEditLoader}
++					showAddGoalForm={this.props.showAddGoalForm}
++					showAddGoal={this.props.showAddGoal}
++					durationCycleDetail={this.props.durationCycleDetail}
++					currentCycleEndDate={this.props.currentCycleEndDate}
++					currentCycleId={this.props.currentCycleId}
++					year={this.props.year}
++					t={this.props.t}
++					fetchOkr={this.props.fetchOkr}
++					setGoalDetail={this.props.setGoalDetail}
++					setIsGoalCreated={this.props.setIsGoalCreated}
++					saveAndEditObjectiveAndKr={this.props.saveAndEditObjectiveAndKr}
++					setFormSubmit={this.props.setFormSubmit}
++					formSubmit={this.props.formSubmit}
++					isGoalCreated={this.props.isGoalCreated}
++					keyDetailObject={this.props.keyDetailObject}
++					goalDetailObject={this.props.goalDetailObject}
++				// showApiMsgs={showApiMsgs}
++				// isTabChanged={isTabChanged}
++				// setIsTabChanged={setIsTabChanged}
++				// addObjectiveCallback={addObjectiveCallback}
++				/>
++			);
++		}
++		return ("");
++	};
++
+ 	render() {
++		if (diagramTimer) {
++			console.log("timer cleared");
++			clearTimeout(diagramTimer);
++		}
++		diagramTimer = setTimeout(() => {
++			console.log("timer called");
++			onAfterDiagramCreated();
++		}, 100);
+ 		const { alignResult } = this.props;
+-		let alignmentData = [];
++		//const { t } = useTranslation();
+ 		if (alignResult.length <= 0) {
+ 			return (
+ 				<Box className='welcome-content'>
+@@ -197,17 +198,20 @@ export default class RelaxedMap extends SampleBase {
+ 				</Box>
+ 			);
+ 		} else {
+-			alignmentData = alignResult;
+-			//alignmentData = okrJsonData; //local sample json data for dev
+-			alignmentData.forEach((item, i) => {
+-				//item.index = i + 1;
+-				if (item.parent.length === 0) {
+-					item.parent = '';
+-				}
+-				return item;
+-			});
+-			DiagramJsonHelper.UpdateHelperProperties(alignmentData);
++			//alignmentData = alignResult;
++			alignmentData = okrJsonData;
++			alignmentData =
++				alignmentData &&
++				alignmentData.length > 0 &&
++				alignmentData.map((item, i) => {
++					//item.index = i + 1;
++					if (item.parent.length === 0) {
++						item.parent = '';
++					}
++					return item;
++				});
+ 		}
++
+ 		return (
+ 			<Box className='diagram-control-pane'>
+ 				<MenuComponent items={this.menuItems} />
+@@ -248,8 +252,62 @@ export default class RelaxedMap extends SampleBase {
+ 					</Box>
+ 				</Box>
+ 				<Box className='control-section'>
+-					<Box id="relax-map-parent" className='content-wrapper'>
+-						{this.createDiagram(alignmentData)}
++					<Box className='content-wrapper'>
++						<DiagramComponent
++							id='diagram'
++							ref={(diagram) => (diagramInstance = diagram)}
++							width={'100%'}
++							height={'1500px'}
++							//snapSettings={{ constraints: SnapConstraints.None }}
++							nodeTemplate={template}
++							// backgroundColor='#6BA5D7'
++							//configures data source settings
++							dataSourceSettings={{
++								id: 'objectiveUniqueId',
++								parentId: 'parent',
++								//dataSource: new DataManager(localBindData),
++								dataSource: new DataManager(alignmentData),
++								doBinding: (nodeModel, data, diagram) => {
++
++									return nodeDefaults(nodeModel, diagram);
++								},
++							}}
++							layout={{
++								connectionPointOrigin: ConnectionPointOrigin.SamePoint,
++								enableAnimation: true,
++								type: 'ComplexHierarchicalTree',
++								orientation: 'LeftToRight',
++								horizontalSpacing: 200,
++								verticalSpacing: 130,
++								arrangement: ChildArrangement.Linear,
++								// getLayoutInfo: (node, options) => {
++								// 	/* tslint:disable:no-string-literal */
++								// 	if (node.data['TextToShow'] === 'General Manager') {
++								// 		options.assistants.push(options.children[0]);
++								// 		options.children.splice(0, 1);
++								// 	}
++								// 	if (!options.hasSubTree) {
++								// 		options.type = 'Right';
++								// 	}
++								// },
++							}}
++							//Disables all interactions except zoom/pan
++							//tool={DiagramTools.ZoomPan}
++							//Configures automatic layout
++
++							//Defines the default node and connector properties
++							getNodeDefaults={(obj, diagram) => {
++								/* tslint:disable:no-string-literal */
++							}}
++							getConnectorDefaults={(connector, diagram) => {
++								return connectorDefaults(connector, diagram);
++							}}
++							click={(args) => {
++								diagramSelectionHelper.OnClickDiagram(args, diagramInstance);
++							}}
++						>
++							<Inject services={[DataBinding, LayoutAnimation, ComplexHierarchicalTree, LineDistribution]} />
++						</DiagramComponent>
+ 					</Box>
+ 				</Box>
+ 				{/* <button onClick={() => expandAll()}>Expand All</button> */}
+@@ -260,65 +318,38 @@ export default class RelaxedMap extends SampleBase {
+ 
+ //sets default value for Node.
+ function nodeDefaults(obj, diagram) {
+-	obj.pivot = { x: 0, y: 0 };
++	//obj.backgroundColor = obj.data.color;
+ 	obj.style = {
+-		fill: 'white',
+-		strokeColor: '#9CD3FF',
+-		strokeWidth: 1,
++		fill: 'orange',
++		strokeColor: 'none',
+ 		color: 'white'
+ 	};
+ 	obj.shape = {
+ 		cornerRadius: 10
+ 	}
++	obj.constraints = NodeConstraints.Default & ~NodeConstraints.Select;
+ 	obj.width = 520;
+ 	obj.height = diagramOkrHelper.GetOkrHeight(obj);
+-	obj.offsetX = -window.innerWidth / 2;
+ 	obj.ports = [diagramOkrHelper.getLeftPort(obj), diagramOkrHelper.getRightPort(obj)];
+ 	return obj;
+ }
+ //sets default value for Connector.
+ function connectorDefaults(connector, diagram) {
+-	connector.targetDecorator.shape = 'Arrow';
+-	connector.type = 'Orthogonal'; // "Bezier";
+-	// connector.type = "Bezier";
+-	connector.cornerRadius = 100;
+-	connector.targetDecorator.height = 10;
+-	connector.targetDecorator.width = 10;
+-	connector.style = { strokeColor: '#5B708B', strokeWidth: 3 };
+-	connector.targetDecorator.style = {
+-		fill: '#5B708B',
+-		strokeColor: '#5B708B',
+-	};
+-	let sourceNode = diagram.getObject(connector.sourceID);
+-	let targetNode = diagram.getObject(connector.targetID);
+-	if (sourceNode.data.objectiveUniqueId === '1596') {
+-		// connector.sourcePortID = 'port1'; //sourceNode.ports[0].id;
+-		// connector.targetPortID = 'port2'; //targetNode.ports[1].id;
+-
+-		connector.sourceDecorator = {
+-			style: {
+-				strokeColor: '#6f409f',
+-				fill: '#6f409f',
+-				strokeWidth: 20,
+-			},
+-			shape: 'Arrow',
+-		};
+-		connector.targetDecorator = {
+-			style: {
+-				strokeColor: '#6f409f',
+-				fill: '#6f409f',
+-				strokeWidth: 2,
+-			},
+-			shape: 'Flat',
++	if (!diagramSelectionHelper.IsSelectionHelper(connector)) {
++		connector.targetDecorator.shape = 'Arrow';
++		connector.type = 'Orthogonal'; // "Bezier";
++		// connector.type = "Bezier";
++		connector.cornerRadius = 100;
++		connector.targetDecorator.height = 10;
++		connector.targetDecorator.width = 10;
++		connector.style = { strokeColor: '#5B708B', strokeWidth: 3 };
++		connector.targetDecorator.style = {
++			fill: '#5B708B',
++			strokeColor: '#5B708B',
+ 		};
+-		connector.targetDecorator.height = 20;
+-		connector.targetDecorator.width = 20;
+-		connector.style = { strokeWidth: 8, strokeColor: '#8E44AD' };
++		return connector;
+ 	}
+-
+-	return connector;
+ }
+-
+ function expandAll(isOnLoad = false) {
+ 	//fits the diagram content within the viewport
+ 	// if (diagramInstance) {
+@@ -336,3 +367,13 @@ function expandAll(isOnLoad = false) {
+ 	}
+ 	// }
+ }
++function onAfterDiagramCreated() {
++	if (diagramInstance && diagramInstance.nodes) {
++		DiagramJsonHelper.UpdateHelperProperties(alignmentData);
++		diagramSelectionHelper.DoReverseConnection(diagramInstance);
++		diagramOkrHelper.CreateOkrNodes(diagramInstance);
++		diagramLayoutHelper.DoCustomOkrLayout(diagramInstance);
++		diagramLayoutHelper.FocusMyOkrs(diagramInstance);
++		diagramInstance.dataBind();
++	}
++}
+\ No newline at end of file
