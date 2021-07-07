@@ -1,0 +1,504 @@
+ .../DiagramHelper/diagram-layout-helper.tsx        |   2 +
+ .../DiagramHelper/diagram-overview-component.tsx   | 125 +++++++++++++++++++++
+ src/components/AlignmentMap/RelaxedMap/index.jsx   |  82 +++++++++-----
+ src/components/AlignmentMap/style.scss             |  69 ++++++------
+ 4 files changed, 214 insertions(+), 64 deletions(-)
+
+diff --git a/src/components/AlignmentMap/RelaxedMap/DiagramHelper/diagram-layout-helper.tsx b/src/components/AlignmentMap/RelaxedMap/DiagramHelper/diagram-layout-helper.tsx
+index f71f24a6..7d0f212a 100644
+--- a/src/components/AlignmentMap/RelaxedMap/DiagramHelper/diagram-layout-helper.tsx
++++ b/src/components/AlignmentMap/RelaxedMap/DiagramHelper/diagram-layout-helper.tsx
+@@ -57,6 +57,8 @@ export class DiagramLayoutHelper {
+ 			diagramIns.dataBind();
+ 		}
+ 		diagramOkrHelper.CreateOkrLabels(diagramInstance, myOkrData);
++		if (diagramOkrHelper.ref_overview && diagramOkrHelper.ref_overview.current)
++			diagramOkrHelper.ref_overview.current.updateOverview();
+ 	}
+ 
+ 	PositionNodes(
+diff --git a/src/components/AlignmentMap/RelaxedMap/DiagramHelper/diagram-overview-component.tsx b/src/components/AlignmentMap/RelaxedMap/DiagramHelper/diagram-overview-component.tsx
+new file mode 100644
+index 00000000..ccbc0278
+--- /dev/null
++++ b/src/components/AlignmentMap/RelaxedMap/DiagramHelper/diagram-overview-component.tsx
+@@ -0,0 +1,125 @@
++import * as React from 'react';
++import { SampleBase } from "../sample-base";
++
++export default class DiagramOverview extends SampleBase {
++    ref_draggbleDiv: any;
++    ref_parent: any;
++    constructor(props: any) {
++        super(props);
++        const { diagramId } = this.props;
++        this.ref_draggbleDiv = React.createRef();
++        this.ref_parent = React.createRef();
++
++        this.state = {
++            //count: props.count,
++            width: 0,
++            height: 0,
++            dragging: false,
++            rel: null,
++            pos: props.initialPos || { x: 0, y: 0 }
++        };
++    }
++    componentDidMount() {
++        this.updateOverview();
++    }
++    componentDidUpdate(props: any, state: any) {
++        if (this.state.dragging && !state.dragging) {
++            document.addEventListener('mousemove', this.onMouseMove.bind(this))
++            document.addEventListener('mouseup', this.onMouseUp.bind(this))
++        } else if (!this.state.dragging && state.dragging) {
++            document.removeEventListener('mousemove', this.onMouseMove.bind(this))
++            document.removeEventListener('mouseup', this.onMouseUp.bind(this))
++        }
++    }
++    updateOverview() {
++        let parentBounds = this.ref_parent.current.getBoundingClientRect();
++        let dIns = this.getDiagramInstance(this.props.diagramId);
++        let diagramElement: any = document.getElementById(this.props.diagramId);
++        let dBounds: any = diagramElement?.getBoundingClientRect();
++        if (dIns) {
++            let s: any = dIns.scroller;
++            let currentZoom = s.currentZoom;
++            let x = ((s.horizontalOffset / s.diagramWidth) * currentZoom) * parentBounds.width;
++            let y = ((s.verticalOffset / s.diagramHeight) * currentZoom) * parentBounds.height;
++            let w = ((s.viewPortWidth / (s.diagramWidth)) * currentZoom) * parentBounds.width;
++            let h = ((s.viewPortHeight / (s.diagramHeight)) * currentZoom) * parentBounds.height;
++            this.setState({ pos: { x: x, y: y }, width: w, height: h });
++        }
++    }
++    onMouseDown(e: any) {
++        if (e.button !== 0) return;
++        let element: any = this.ref_draggbleDiv.current;
++        this.setState({
++            dragging: true,
++            rel: {
++                x: e.pageX - element?.offsetLeft,
++                y: e.pageY - element?.offsetTop
++            }
++        })
++        e.stopPropagation();
++        e.preventDefault();
++    }
++    onMouseUp(e: any) {
++        this.setState({ dragging: false });
++        e.stopPropagation();
++        e.preventDefault();
++    }
++    onMouseMove(e: any) {
++        if (!this.state.dragging) return;
++        let x = e.pageX - this.state.rel.x;
++        let y = e.pageY - this.state.rel.y;
++        let bounds = this.ref_draggbleDiv.current.getBoundingClientRect();
++        let parentBounds = this.ref_parent.current.getBoundingClientRect();
++        x = x < 0 ? 0 : x;
++        y = y < 0 ? 0 : y;
++        x = x > parentBounds.width - bounds.width ? parentBounds.width - bounds.width : x;
++        y = y > parentBounds.height - bounds.height ? parentBounds.height - bounds.height : y;
++        let diffX = x - this.state.pos.x;
++        let diffY = y - this.state.pos.y;
++        this.setState({
++            pos: {
++                x: x,
++                y: y
++            }
++        });
++        let dIns = this.getDiagramInstance(this.props.diagramId);
++        let diagramElement: any = document.getElementById(this.props.diagramId);
++        diffX = (diffX / parentBounds.width) * diagramElement.clientWidth;
++        diffY = (diffY / parentBounds.height) * diagramElement.clientHeight;
++        this.panDiagram(-diffX, -diffY);
++        e.stopPropagation();
++        e.preventDefault();
++    }
++    getDiagramInstance(diagramId: string) {
++        let diagramElement: any = document.getElementById(diagramId);
++        if (diagramElement && diagramElement.ej2_instances && diagramElement.ej2_instances.length > 0) {
++            return diagramElement.ej2_instances[0];
++        }
++        return null;
++    }
++    panDiagram(x: number, y: number) {
++        if (this.props.diagramId) {
++            let dIns = this.getDiagramInstance(this.props.diagramId);
++            if (dIns) {
++                dIns.pan(x, y);
++            }
++        }
++    }
++    render() {
++        return (
++            <div ref={this.ref_parent} className='overview-parent'>
++                <div onMouseDown={this.onMouseDown.bind(this)}
++                    style={{
++                        position: 'absolute',
++                        left: this.state.pos.x + 'px',
++                        top: this.state.pos.y + 'px',
++                        width: this.state.width + 'px',
++                        height: this.state.height + 'px',
++                        background: 'orange'
++                    }}
++                    ref={this.ref_draggbleDiv}
++                    draggable='true' className='overview-dragger'>
++                </div>
++            </div>);
++    }
++}
+\ No newline at end of file
+diff --git a/src/components/AlignmentMap/RelaxedMap/index.jsx b/src/components/AlignmentMap/RelaxedMap/index.jsx
+index f1c54e00..2295d380 100644
+--- a/src/components/AlignmentMap/RelaxedMap/index.jsx
++++ b/src/components/AlignmentMap/RelaxedMap/index.jsx
+@@ -3,6 +3,7 @@ import {
+ 	LayoutAnimation,
+ 	DataBinding,
+ 	DiagramComponent,
++	OverviewComponent,
+ 	SnapConstraints,
+ 	NodeConstraints,
+ 	Inject,
+@@ -29,6 +30,7 @@ import { DiagramSelectionHelper } from './DiagramHelper/diagram-selection-helper
+ import { DiagramOkrHelper } from './DiagramHelper/diagram-okr-helper';
+ import { DiagramJsonHelper } from './DiagramHelper/diagram-json-helper';
+ import okrJsonData from './DiagramHelper/okr_data';
++import DiagramOverview from './DiagramHelper/diagram-overview-component';
+ 
+ let diagramInstance;
+ let template;
+@@ -37,21 +39,21 @@ let diagramLayoutHelper;
+ let diagramSelectionHelper;
+ let diagramOkrHelper;
+ let alignmentData = [];
++let ref_overview;
+ export default class RelaxedMap extends SampleBase {
+ 	constructor(props) {
+ 		super(props);
+ 		const { alignResult } = this.props;
+ 		const userDetail = JSON.parse(getLocalStorageItem('userDetail') || '{}');
+ 		this.state = {
+-			mapData: alignResult,
+-			loggedInUser: userDetail,
++			overviewProps: { diagramId: 'diagram' }
+ 		};
+ 		template = this.diagramTemplate;
+ 		diagramLayoutHelper = new DiagramLayoutHelper();
+ 		diagramSelectionHelper = new DiagramSelectionHelper();
+ 		diagramOkrHelper = new DiagramOkrHelper();
++		ref_overview = React.createRef();
+ 	}
+-
+ 	onItemClick(args) {
+ 		switch (args.item.text) {
+ 			case 'Zoom In':
+@@ -64,7 +66,7 @@ export default class RelaxedMap extends SampleBase {
+ 				break;
+ 			case 'Reset':
+ 				diagramInstance.reset();
+-				layoutDiagram();
++				this.layoutDiagram();
+ 				break;
+ 			case 'ToggleExpand':
+ 				expandAll();
+@@ -204,9 +206,38 @@ export default class RelaxedMap extends SampleBase {
+ 		diagramTimer = setTimeout(() => {
+ 			console.log('onAfterDiagramCreated started');
+ 			this.toggleDiagramLoading(false);
+-			onAfterDiagramCreated();
++			this.onAfterDiagramCreated();
+ 		}, 10);
+ 	}
++	onAfterDiagramCreated() {
++		if (diagramInstance && diagramInstance.nodes) {
++			diagramInstance.layout.type = null;
++			diagramSelectionHelper.DoReverseConnection(diagramInstance);
++			diagramOkrHelper.CreateOkrNodes(diagramInstance);
++			this.layoutDiagram();
++			let nodes = diagramLayoutHelper.GetJsonNodes(diagramInstance);
++			for (let i = 0; i < nodes.length; i++) {
++				let n = nodes[i];
++				n.style.strokeColor = '#9CD3FF';
++				n.style.fill = 'white';
++			}
++			diagramInstance.dataBind();
++			console.log('Dynamic creation done');
++		}
++	}
++	layoutDiagram() {
++		if (diagramInstance) {
++			diagramSelectionHelper.HideExceptMyOkrs(diagramInstance);
++			diagramLayoutHelper.FocusMyOkrs(diagramInstance);
++			diagramOkrHelper['ref_overview'] = ref_overview;
++			diagramLayoutHelper.DoCustomOkrLayout(diagramInstance, diagramOkrHelper);
++			//this.updateOverview();
++		}
++	}
++	updateOverview() {
++		if (ref_overview && ref_overview.current)
++			ref_overview.current.updateOverview();
++	}
+ 	toggleDiagramLoading(isShow) {
+ 		let wText = document.querySelector('.control-section .welcome-content');
+ 		if (wText) {
+@@ -251,7 +282,7 @@ export default class RelaxedMap extends SampleBase {
+ 						<Box className='content-wrapper'>
+ 							<ToolbarComponent
+ 								id='toolbar_diagram'
+-								clicked={this.onItemClick}
++								clicked={this.onItemClick.bind(this)}
+ 								items={[
+ 									{
+ 										type: 'Button',
+@@ -297,6 +328,7 @@ export default class RelaxedMap extends SampleBase {
+ 							height={'calc(100vh - 222px)'}
+ 							snapSettings={{ constraints: SnapConstraints.None }}
+ 							nodeTemplate={template}
++							// scrollSettings={{ scrollLimit: "Infinity" }}
+ 							//configures data source settings
+ 							dataSourceSettings={{
+ 								id: 'objectiveUniqueId',
+@@ -324,13 +356,26 @@ export default class RelaxedMap extends SampleBase {
+ 							getConnectorDefaults={(connector, diagram) => {
+ 								return connectorDefaults(connector, diagram);
+ 							}}
++							scrollChange={() => {
++								//this.updateOverview();
++							}}
+ 						>
+ 							<Inject services={[DataBinding, ComplexHierarchicalTree, LineDistribution]} />
+ 						</DiagramComponent>
++						{/* <OverviewComponent
++							id="overview"
++							style={{ background: 'green', position: 'absolute', top: "30px" }}
++							sourceID="diagram"
++							width={"100%"}
++							height={"150px"}
++						/> */}
++						<DiagramOverview ref={ref_overview}
++							{...this.state.overviewProps}
++						></DiagramOverview>
+ 					</Box>
+ 				</Box>
+ 				{/* <button onClick={() => expandAll()}>Expand All</button> */}
+-			</Box>
++			</Box >
+ 		);
+ 	}
+ }
+@@ -393,27 +438,4 @@ function expandAll(isOnLoad = false) {
+ 		);
+ 	}
+ 	// }
+-}
+-function onAfterDiagramCreated() {
+-	if (diagramInstance && diagramInstance.nodes) {
+-		diagramInstance.layout.type = null;
+-		diagramSelectionHelper.DoReverseConnection(diagramInstance);
+-		diagramOkrHelper.CreateOkrNodes(diagramInstance);
+-		layoutDiagram();
+-		let nodes = diagramLayoutHelper.GetJsonNodes(diagramInstance);
+-		for (let i = 0; i < nodes.length; i++) {
+-			let n = nodes[i];
+-			n.style.strokeColor = '#9CD3FF';
+-			n.style.fill = 'white';
+-		}
+-		diagramInstance.dataBind();
+-		console.log('Dynamic creation done');
+-	}
+-}
+-function layoutDiagram() {
+-	if (diagramInstance) {
+-		diagramSelectionHelper.HideExceptMyOkrs(diagramInstance);
+-		diagramLayoutHelper.FocusMyOkrs(diagramInstance);
+-		diagramLayoutHelper.DoCustomOkrLayout(diagramInstance, diagramOkrHelper);
+-	}
+ }
+\ No newline at end of file
+diff --git a/src/components/AlignmentMap/style.scss b/src/components/AlignmentMap/style.scss
+index cb6fad15..eacf2748 100644
+--- a/src/components/AlignmentMap/style.scss
++++ b/src/components/AlignmentMap/style.scss
+@@ -1,4 +1,4 @@
+-@import '../../styles/globalVariable.scss';
++@import "../../styles/globalVariable.scss";
+ 
+ .alignment-tab-panel {
+ 	padding: 0px 0 0;
+@@ -17,20 +17,20 @@
+ 	}
+ 	.team-relaxed-tab {
+ 		.diagram-control-pane {
+-			[id*='_tarDec_groupElement'] {
++			[id*="_tarDec_groupElement"] {
+ 				@include transform(translate(-20px, -61px));
+ 			}
+-			[id*='_path_groupElement'] {
++			[id*="_path_groupElement"] {
+ 				@include transform(translate(-0px, -61px));
+ 			}
+ 		}
+ 	}
+ 	.compact-tab {
+ 		.diagram-control-pane {
+-			[id*='_tarDec_groupElement'] {
++			[id*="_tarDec_groupElement"] {
+ 				@include transform(translate(-20px, -26px));
+ 			}
+-			[id*='_path_groupElement'] {
++			[id*="_path_groupElement"] {
+ 				@include transform(translate(-0px, -26px));
+ 			}
+ 		}
+@@ -39,14 +39,14 @@
+ 	.people-compact-tab,
+ 	.people-ultracompact-tab {
+ 		.diagram-control-pane {
+-			[id*='_tarDec_groupElement'] {
++			[id*="_tarDec_groupElement"] {
+ 				@include transform(translate(16px, 0px));
+ 			}
+ 		}
+ 	}
+ 	.ultraCompact-tab {
+ 		.diagram-control-pane {
+-			[id*='_tarDec_groupElement'] {
++			[id*="_tarDec_groupElement"] {
+ 				@include transform(translate(-17px, 0px));
+ 			}
+ 		}
+@@ -133,7 +133,7 @@
+ 						@include transition-value(0.5s);
+ 					}
+ 					&::before {
+-						content: '';
++						content: "";
+ 						border: 10px solid transparent;
+ 						top: 0.66em;
+ 						border-right-width: 0;
+@@ -167,7 +167,7 @@
+ 							@include transform(translate(-1em, -50%));
+ 						}
+ 					}
+-					&[aria-label='Zoom In'] {
++					&[aria-label="Zoom In"] {
+ 						.e-tbar-btn-text {
+ 							background: url(../../images/plus-icon.svg) no-repeat center center;
+ 							background-size: 12px;
+@@ -186,7 +186,7 @@
+ 							top: 1.15em;
+ 						}
+ 					}
+-					&[aria-label='Zoom Out'] {
++					&[aria-label="Zoom Out"] {
+ 						.e-tbar-btn-text {
+ 							background: url(../../images/minus-icon.svg) no-repeat center center;
+ 							background-size: 12px;
+@@ -203,7 +203,7 @@
+ 							top: 49px;
+ 						}
+ 					}
+-					&[aria-label='Reset'] {
++					&[aria-label="Reset"] {
+ 						.e-tbar-btn-text {
+ 							background: url(../../images/reset.svg) no-repeat center center;
+ 							background-size: 15px;
+@@ -233,8 +233,8 @@
+ 				opacity: 0;
+ 			}
+ 		}
+-		[id*='_icon_content_rect_groupElement'],
+-		[id*='_icon_content_groupElement'] {
++		[id*="_icon_content_rect_groupElement"],
++		[id*="_icon_content_groupElement"] {
+ 			rect {
+ 				rx: 50px !important;
+ 				ry: 50px !important;
+@@ -271,7 +271,7 @@
+ 				line-height: 14px;
+ 			}
+ 			&::after {
+-				content: '';
++				content: "";
+ 				width: 0.3125em;
+ 				height: 0.3125em;
+ 				background: $color2;
+@@ -484,7 +484,7 @@
+ 				max-width: 100%;
+ 				min-height: 0px;
+ 				&::before {
+-					content: '';
++					content: "";
+ 					background: url(../../images/alignment-map-bg-3.svg) repeat 0 0;
+ 					position: absolute;
+ 					left: 0;
+@@ -1214,7 +1214,7 @@
+ }
+ .alignment-popper-progress-bar {
+ 	margin-top: 10px;
+-	&[x-placement='top'] {
++	&[x-placement="top"] {
+ 		margin-bottom: 10px;
+ 		margin-top: 0px;
+ 	}
+@@ -1443,7 +1443,7 @@
+ 			}
+ 		}
+ 	}
+-    .orphan-card {
++	.orphan-card {
+ 		border-radius: 6px;
+ 	}
+ 	.MuiIconButton-root.connect-icon {
+@@ -1455,8 +1455,8 @@
+ 		display: none;
+ 	}
+ 	&.diagram-control-pane .e-diagram {
+-		[id*='_diagramLayer_svg'] {
+-			g > g > g[id*='_content_groupElement'] {
++		[id*="_diagramLayer_svg"] {
++			g > g > g[id*="_content_groupElement"] {
+ 				-webkit-filter: drop-shadow(0px 0px 5px $color3Light4);
+ 				filter: drop-shadow(0px 0px 5px $color3Light4);
+ 			}
+@@ -1473,22 +1473,23 @@
+ 	}
+ }
+ 
+-.overview-diaparent{
++.overview-parent {
+ 	position: absolute;
+-    top: 10px;
+-    right: 116px;
+-    z-index: 10000;
+-    width: 176px;
+-    height: 110px;
+-    background: #e8f5ff;
++	top: 10px;
++	right: 116px;
++	z-index: 10000;
++	width: 176px;
++	height: 110px;
++	background: #e8f5ff;
++	padding: 20px;
+ }
+ 
+-.overview-dragger{
+-	width: 50px;
+-    height: 50px;
+-    position: relative;
+-    left: 30px;
+-    top: 30px;
+-    background: #f3f8fc;
+-    border: 1px solid #d3d3d3;
++.overview-dragger {
++	// width: 50px;
++	// height: 50px;
++	// position: relative;
++	// left: 30px;
++	// top: 30px;
++	background: #f3f8fc;
++	border: 1px solid #d3d3d3;
+ }
